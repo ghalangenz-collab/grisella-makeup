@@ -1,0 +1,42 @@
+[
+  {
+    "id": "11111111-1111-1111-1111-111111111111",
+    "name": "Bridesmaid Makeup",
+    "description": "Makeup natural flawless glam untuk pendamping pengantin (termasuk hijab do / hair do standar).",
+    "price": 450000,
+    "duration_minutes": 75,
+    "is_active": true,
+    "created_at": "2026-01-01T00:00:00.000Z",
+    "updated_at": "2026-01-01T00:00:00.000Z"
+  },
+  {
+    "id": "22222222-2222-2222-2222-222222222222",
+    "name": "Wedding Makeup (Akad / Resepsi)",
+    "description": "Rias pengantin premium tahan hingga 12 jam, complexion waterproof & retouch touch-up kit eksklusif.",
+    "price": 2500000,
+    "duration_minutes": 180,
+    "is_active": true,
+    "created_at": "2026-01-01T00:00:00.000Z",
+    "updated_at": "2026-01-01T00:00:00.000Z"
+  },
+  {
+    "id": "33333333-3333-3333-3333-333333333333",
+    "name": "Graduation / Wisuda Makeup",
+    "description": "Fresh glowing look tahan seharian untuk momen wisuda, free pasang bulu mata premium.",
+    "price": 400000,
+    "duration_minutes": 60,
+    "is_active": true,
+    "created_at": "2026-01-01T00:00:00.000Z",
+    "updated_at": "2026-01-01T00:00:00.000Z"
+  },
+  {
+    "id": "44444444-4444-4444-4444-444444444444",
+    "name": "Lainnya (Custom Request)",
+    "description": "Request makeup khusus (Photoshoot, Party, Sangjit, Panggung, dll). Durasi & harga dikonfirmasi oleh Admin.",
+    "price": 0,
+    "duration_minutes": 90,
+    "is_active": true,
+    "created_at": "2026-01-01T00:00:00.000Z",
+    "updated_at": "2026-01-01T00:00:00.000Z"
+  }
+]

@@ -1,0 +1,16 @@
+{
+  "name": "Grisella Makeup",
+  "short_name": "Grisella MUA",
+  "description": "Sistem Booking & CRM MUA Grisella Makeup",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#FDFBF7",
+  "theme_color": "#C97A7E",
+  "icons": [
+    {
+      "src": "/favicon.ico",
+      "sizes": "64x64 32x32 24x24 16x16",
+      "type": "image/x-icon"
+    }
+  ]
+}

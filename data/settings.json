@@ -1,0 +1,14 @@
+{
+  "dp_percentage": "30",
+  "buffer_studio_minutes": "30",
+  "buffer_home_minutes": "60",
+  "min_hours_same_day": "3",
+  "studio_address": "jl gunur no 368",
+  "mua_whatsapp": "6285156847921",
+  "cancellation_policy": "DP (Down Payment) yang telah dibayarkan bersifat non-refundable (tidak dapat dikembalikan) jika pemesanan dibatalkan secara sepihak oleh klien.",
+  "transport_fee_zones": "[{\"zone\":\"Jakarta Selatan & sekitarnya (<5 km)\",\"fee\":50000},{\"zone\":\"Jakarta Pusat / Barat / Timur (5-15 km)\",\"fee\":100000},{\"zone\":\"Tangerang / Depok / Bekasi / Luar Kota (>15 km)\",\"fee\":175000}]",
+  "qris_image_url": "/images/qris-grisella.svg",
+  "qris_merchant_name": "GRISELLA MAKEUP",
+  "qris_nmid": "ID102034091283",
+  "bank_accounts": "[{\"id\":\"bca-1\",\"bank_name\":\"BCA\",\"account_number\":\"461089199\",\"account_name\":\"GRISELLA CARELA\"},{\"id\":\"mandiri-1\",\"bank_name\":\"Bank Mandiri\",\"account_number\":\"1370019283741\",\"account_name\":\"GRISELLA PUTRI\"},{\"id\":\"bri-1\",\"bank_name\":\"Bank BRI\",\"account_number\":\"034101002345501\",\"account_name\":\"GRISELLA PUTRI\"}]"
+}

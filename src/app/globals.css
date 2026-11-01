@@ -1,0 +1,90 @@
+@import "tailwindcss";
+
+@layer base {
+  :root {
+    --primary: #c97a7e;
+    --primary-hover: #b5676b;
+    --primary-light: #f7e6e8;
+    --primary-dark: #8c4247;
+    
+    --cream-bg: #fdfbf7;
+    --card-bg: #ffffff;
+    --border-color: #ebdcd5;
+    
+    --text-primary: #2d2424;
+    --text-secondary: #635354;
+    --text-muted: #9c8e8f;
+
+    --gold-accent: #c5a059;
+    --gold-light: #fbf5e8;
+    --gold-dark: #9a7833;
+  }
+
+  body {
+    background-color: var(--cream-bg);
+    color: var(--text-primary);
+    font-family: var(--font-jakarta), -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+  }
+
+  h1, h2, h3, .font-serif {
+    font-family: var(--font-playfair), Georgia, "Times New Roman", serif;
+    letter-spacing: -0.01em;
+  }
+}
+
+/* Custom Luxury Rose & Champagne styling */
+.bg-cream-surface {
+  background-color: #fdfbf7;
+}
+
+.bg-rose-soft {
+  background-color: #faedf0;
+}
+
+.bg-rose-accent {
+  background-color: #c97a7e;
+}
+
+.text-rose-accent {
+  color: #c97a7e;
+}
+
+.border-rose-soft {
+  border-color: #f1dadf;
+}
+
+/* Luxury Gold styling */
+.text-gold-accent {
+  color: #c5a059;
+}
+
+.bg-gold-soft {
+  background-color: #fbf5e8;
+}
+
+.border-gold-soft {
+  border-color: #f0dfbd;
+}
+
+/* Mobile smooth transitions */
+.transition-smooth {
+  transition: all 0.25s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+/* Custom elegant scrollbars */
+::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+::-webkit-scrollbar-track {
+  background: #fdfbf7;
+}
+::-webkit-scrollbar-thumb {
+  background: #ebdcd5;
+  border-radius: 9999px;
+}
+::-webkit-scrollbar-thumb:hover {
+  background: #c97a7e;
+}
