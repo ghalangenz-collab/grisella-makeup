@@ -27,10 +27,25 @@ export default function AdminLayout({ children }: AdminLayoutProps) {
   const pathname = usePathname();
   const router = useRouter();
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
+  const [isAuthenticated, setIsAuthenticated] = useState<boolean | null>(null);
   const [currentTime, setCurrentTime] = useState('');
 
   // Sembunyikan sidebar di halaman login
   const isLoginPage = pathname === '/admin/login';
+
+  useEffect(() => {
+    if (isLoginPage) {
+      setIsAuthenticated(true);
+      return;
+    }
+    const session = typeof window !== 'undefined' ? localStorage.getItem('grisella_admin_session') : null;
+    if (!session) {
+      setIsAuthenticated(false);
+      router.replace('/admin/login');
+    } else {
+      setIsAuthenticated(true);
+    }
+  }, [isLoginPage, pathname, router]);
 
   useEffect(() => {
     const updateWIB = () => {
@@ -57,6 +72,17 @@ export default function AdminLayout({ children }: AdminLayoutProps) {
 
   if (isLoginPage) {
     return <>{children}</>;
+  }
+
+  if (isAuthenticated === false || isAuthenticated === null) {
+    return (
+      <div className="min-h-screen bg-[#FDFBF7] flex items-center justify-center">
+        <div className="flex flex-col items-center gap-2 text-xs text-[#635354]">
+          <div className="w-6 h-6 border-2 border-[#C97A7E] border-t-transparent rounded-full animate-spin" />
+          <span>Memeriksa otentikasi admin...</span>
+        </div>
+      </div>
+    );
   }
 
   const navLinks = [

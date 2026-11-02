@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createAdminClient } from '@/lib/supabase/admin';
-import { getStoredBookingByToken, updateStoredBooking, getStoredSettings } from '@/lib/storage';
+import { getStoredBookingByToken, updateStoredBooking } from '@/lib/storage';
+import { getSystemSettings } from '@/lib/services';
 
 export const dynamic = 'force-dynamic';
 
@@ -15,10 +16,10 @@ export async function GET(
       return NextResponse.json({ error: 'Token booking tidak valid' }, { status: 400 });
     }
 
-    // 1. Try local JSON storage first (fast, reliable, always persistent)
+    // 1. Coba ambil dari local storage
     let bookingData = getStoredBookingByToken(token);
 
-    // 2. Try Supabase as sync/enhancement
+    // 2. Coba ambil dan perbarui dengan data Supabase (agar sinkron di semua device)
     try {
       const supabase = createAdminClient();
       const { data, error } = await supabase
@@ -53,7 +54,7 @@ export async function GET(
       return NextResponse.json({ error: 'Booking tidak ditemukan' }, { status: 404 });
     }
 
-    const settings = getStoredSettings();
+    const settings = await getSystemSettings();
 
     return NextResponse.json({
       booking: bookingData,
@@ -78,27 +79,63 @@ export async function POST(
       return NextResponse.json({ error: 'Bukti transfer wajib diunggah' }, { status: 400 });
     }
 
+    const uploadedAt = new Date().toISOString();
     const updates = {
       status: 'menunggu_verifikasi' as const,
       payment_receipt_url,
       payment_sender_name: payment_sender_name || null,
       payment_bank_name: payment_bank_name || null,
-      payment_receipt_uploaded_at: new Date().toISOString(),
+      payment_receipt_uploaded_at: uploadedAt,
     };
 
     // 1. Update in local storage
     const updated = updateStoredBooking(token, updates);
 
-    // 2. Best-effort update to Supabase
+    // 2. Update to Supabase (Database multi-device)
     try {
       const supabase = createAdminClient();
-      await supabase
+
+      const fullUpdatePayload: Record<string, any> = {
+        status: 'menunggu_verifikasi',
+        payment_receipt_url,
+        payment_sender_name: payment_sender_name || null,
+        payment_bank_name: payment_bank_name || null,
+        payment_receipt_uploaded_at: uploadedAt,
+        updated_at: uploadedAt,
+      };
+
+      const { error: sbUpdateErr } = await supabase
         .from('bookings')
-        .update({
-          status: 'menunggu_verifikasi',
-          updated_at: new Date().toISOString(),
-        })
+        .update(fullUpdatePayload)
         .eq('public_token', token);
+
+      if (sbUpdateErr) {
+        console.warn('Supabase full update failed, retrying with fallback note:', sbUpdateErr.message);
+        // Fallback 1: Coba dengan status 'menunggu_verifikasi' dan note (jangan timpa note lama jika ada)
+        const baseNote = updated?.notes ? `${updated.notes}\n` : '';
+        const noteAppend = `${baseNote}[BUKTI DP: ${payment_receipt_url} | ${payment_bank_name || 'Bank'} a.n ${payment_sender_name || 'Klien'}]`;
+        const { error: err2 } = await supabase
+          .from('bookings')
+          .update({
+            status: 'menunggu_verifikasi',
+            notes: noteAppend,
+            updated_at: uploadedAt,
+          })
+          .eq('public_token', token);
+
+        // Fallback 2: Jika check constraint database menolak 'menunggu_verifikasi', fallback ke 'menunggu_konfirmasi'
+        if (err2) {
+          console.warn('Supabase status check constraint fallback:', err2.message);
+          await supabase
+            .from('bookings')
+            .update({
+              status: 'menunggu_konfirmasi',
+              notes: noteAppend,
+              updated_at: uploadedAt,
+            })
+            .eq('public_token', token);
+        }
+      }
     } catch (e) {
       console.warn('Supabase booking update skipped:', e);
     }

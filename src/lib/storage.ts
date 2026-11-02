@@ -137,7 +137,12 @@ function writeJsonFile<T>(filePath: string, data: T): void {
 // ====================================================================
 
 export function getStoredServices(): Service[] {
-  return readJsonFile<Service[]>(SERVICES_FILE, INITIAL_SERVICES);
+  const list = readJsonFile<Service[]>(SERVICES_FILE, INITIAL_SERVICES);
+  if (!list || list.length <= 4 || !list[0]?.category) {
+    saveStoredServices(INITIAL_SERVICES);
+    return INITIAL_SERVICES;
+  }
+  return list;
 }
 
 export function saveStoredServices(services: Service[]): void {
@@ -158,9 +163,11 @@ export function upsertStoredService(service: Partial<Service> & { id?: string })
   const updated: Service = {
     id,
     name: service.name !== undefined ? service.name : (existing ? existing.name : 'Layanan Baru'),
+    category: service.category !== undefined ? service.category : (existing ? existing.category : 'Bridesmaid'),
     description: service.description !== undefined ? service.description : (existing ? existing.description : ''),
     price: service.price !== undefined ? (Number(service.price) || 0) : (existing ? existing.price : 0),
     duration_minutes: service.duration_minutes !== undefined ? (Number(service.duration_minutes) || 60) : (existing ? existing.duration_minutes : 60),
+    image_url: service.image_url !== undefined ? service.image_url : (existing ? existing.image_url : null),
     is_active: service.is_active !== undefined ? Boolean(service.is_active) : (existing ? existing.is_active : true),
     created_at: existing ? existing.created_at : new Date().toISOString(),
     updated_at: new Date().toISOString(),

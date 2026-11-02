@@ -2,7 +2,7 @@
 
 import { useState } from 'react';
 import { useRouter } from 'next/navigation';
-import { Sparkles, Lock, Mail, ArrowRight, ShieldCheck } from 'lucide-react';
+import { Sparkles, Lock, Mail, ArrowRight } from 'lucide-react';
 import { createClient } from '@/lib/supabase/client';
 
 export default function AdminLoginPage() {
@@ -17,44 +17,47 @@ export default function AdminLoginPage() {
     setLoading(true);
     setErrorMsg(null);
 
-    try {
-      const supabase = createClient();
-      const { data, error } = await supabase.auth.signInWithPassword({
-        email,
-        password,
-      });
+    const cleanEmail = email.toLowerCase().trim();
 
-      if (error) {
-        // Fallback: Jika belum membuat akun auth di Supabase, izinkan demo credential untuk kemudahan pemilik
-        if (
-          (email === 'admin@grisellamakeup.com' && password === 'admin123') ||
-          email.toLowerCase().includes('admin')
-        ) {
-          localStorage.setItem('grisella_admin_session', JSON.stringify({ email, role: 'owner' }));
+    try {
+      // 1. Coba login melalui Supabase Auth
+      try {
+        const supabase = createClient();
+        const { data, error } = await supabase.auth.signInWithPassword({
+          email: cleanEmail,
+          password,
+        });
+
+        if (!error && data?.session) {
+          localStorage.setItem('grisella_admin_session', JSON.stringify(data.session.user));
           router.push('/admin');
           return;
         }
-        setErrorMsg(error.message || 'Email atau password salah');
-        setLoading(false);
+      } catch {
+        // Abaikan jika Supabase auth offline / belum terkonfigurasi
+      }
+
+      // 2. Akun resmi admin Grisella Makeup
+      if (cleanEmail === 'grisellacarela@gmail.com' && password === 'taruna08') {
+        localStorage.setItem(
+          'grisella_admin_session',
+          JSON.stringify({
+            email: 'grisellacarela@gmail.com',
+            name: 'Grisella Carela',
+            role: 'owner',
+            login_at: new Date().toISOString(),
+          })
+        );
+        router.push('/admin');
         return;
       }
 
-      if (data?.session) {
-        localStorage.setItem('grisella_admin_session', JSON.stringify(data.session.user));
-        router.push('/admin');
-      }
+      setErrorMsg('Email atau password admin salah. Silakan coba kembali.');
+      setLoading(false);
     } catch {
-      setErrorMsg('Gagal terhubung ke layanan otentikasi');
+      setErrorMsg('Gagal terhubung ke layanan otentikasi. Silakan periksa koneksi.');
       setLoading(false);
     }
-  };
-
-  const handleQuickDemoAccess = () => {
-    localStorage.setItem(
-      'grisella_admin_session',
-      JSON.stringify({ email: 'admin@grisellamakeup.com', role: 'owner', name: 'Grisella MUA' })
-    );
-    router.push('/admin');
   };
 
   return (
@@ -67,7 +70,7 @@ export default function AdminLoginPage() {
           </div>
           <h1 className="font-serif text-2xl font-bold text-[#2D2424]">Dashboard Pemilik</h1>
           <p className="text-xs text-[#635354]">
-            Masuk untuk mengelola booking, kalender kerja, dan CRM Grisella Makeup.
+            Masuk untuk mengelola reservasi, verifikasi DP, dan CRM Grisella Makeup.
           </p>
         </div>
 
@@ -90,7 +93,7 @@ export default function AdminLoginPage() {
                 required
                 value={email}
                 onChange={(e) => setEmail(e.target.value)}
-                placeholder="admin@grisellamakeup.com"
+                placeholder="grisellacarela@gmail.com"
                 className="w-full text-xs p-3 rounded-xl border border-[#EBDCD5] bg-white text-[#2D2424] focus:outline-none focus:border-[#C97A7E] focus:ring-1 focus:ring-[#C97A7E]"
               />
             </div>
@@ -113,7 +116,7 @@ export default function AdminLoginPage() {
             <button
               type="submit"
               disabled={loading}
-              className="w-full py-3 px-4 rounded-xl bg-[#C97A7E] hover:bg-[#B5676B] text-white text-xs font-semibold shadow-md transition-all flex items-center justify-center gap-2 disabled:opacity-50"
+              className="w-full py-3 px-4 rounded-xl bg-[#C97A7E] hover:bg-[#B5676B] text-white text-xs font-semibold shadow-md transition-all flex items-center justify-center gap-2 disabled:opacity-50 cursor-pointer active:scale-98"
             >
               {loading ? (
                 <span className="inline-block w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" />
@@ -125,25 +128,13 @@ export default function AdminLoginPage() {
               )}
             </button>
           </form>
-
-          {/* Quick Demo Access Button for Owner Convenience */}
-          <div className="pt-3 border-t border-[#F1DADF] text-center">
-            <button
-              type="button"
-              onClick={handleQuickDemoAccess}
-              className="text-xs text-[#8C4247] hover:text-[#C97A7E] font-medium flex items-center justify-center gap-1.5 mx-auto bg-[#FAEDF0] px-3 py-1.5 rounded-full"
-            >
-              <ShieldCheck className="w-3.5 h-3.5 text-[#C97A7E]" />
-              <span>Akses Cepat Pemilik (Mode Langsung)</span>
-            </button>
-          </div>
         </div>
 
         {/* Back Link */}
         <div className="text-center">
           <button
             onClick={() => router.push('/')}
-            className="text-xs text-[#9C8E8F] hover:text-[#2D2424]"
+            className="text-xs text-[#9C8E8F] hover:text-[#2D2424] cursor-pointer"
           >
             &larr; Kembali ke Halaman Booking Klien
           </button>

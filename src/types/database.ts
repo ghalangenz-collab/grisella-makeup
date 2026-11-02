@@ -35,9 +35,11 @@ export type LoyaltyBadge =
 export interface Service {
   id: string;
   name: string;
+  category?: 'Bridesmaid' | 'Wedding' | 'Graduation' | 'Lainnya' | string;
   description: string | null;
   price: number;
   duration_minutes: number;
+  image_url?: string | null;
   is_active: boolean;
   created_at: string;
   updated_at: string;
@@ -76,6 +78,9 @@ export interface Booking {
   service_location: ServiceLocation;
   address: string | null;
   address_benchmark: string | null;
+  location_map_url?: string | null;
+  gps_latitude?: number | null;
+  gps_longitude?: number | null;
   notes: string | null;
   start_at: string;
   end_at: string;

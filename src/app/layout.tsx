@@ -1,6 +1,7 @@
 import type { Metadata, Viewport } from 'next';
 import { Playfair_Display, Plus_Jakarta_Sans } from 'next/font/google';
 import './globals.css';
+import PWAProvider from '@/components/pwa/PWAProvider';
 
 const playfair = Playfair_Display({
   subsets: ['latin'],
@@ -19,6 +20,15 @@ export const metadata: Metadata = {
   description:
     'Sistem reservasi online eksklusif Grisella Makeup. Layanan rias pengantin, bridesmaid, wisuda, dan event spesial dengan look natural flawless glam tahan lama.',
   manifest: '/manifest.json',
+  appleWebApp: {
+    capable: true,
+    statusBarStyle: 'default',
+    title: 'Grisella Makeup',
+  },
+  icons: {
+    icon: '/icon',
+    apple: '/apple-icon',
+  },
 };
 
 export const viewport: Viewport = {
@@ -36,8 +46,14 @@ export default function RootLayout({
 }>) {
   return (
     <html lang="id" className={`${playfair.variable} ${jakarta.variable}`}>
+      <head>
+        <link rel="apple-touch-icon" href="/apple-icon" />
+        <meta name="apple-mobile-web-app-capable" content="yes" />
+        <meta name="apple-mobile-web-app-status-bar-style" content="default" />
+        <meta name="apple-mobile-web-app-title" content="Grisella Makeup" />
+      </head>
       <body className="min-h-screen bg-[#FDFBF7] text-[#2D2424] antialiased selection:bg-[#F5DAE0] selection:text-[#8C4247] font-sans">
-        {children}
+        <PWAProvider>{children}</PWAProvider>
       </body>
     </html>
   );

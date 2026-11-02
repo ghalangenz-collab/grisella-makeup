@@ -15,7 +15,7 @@ import {
   Phone,
   CheckCircle,
 } from 'lucide-react';
-import { formatRupiah, formatWIBDate, formatWIBTime } from '@/lib/utils';
+import { formatRupiah, formatWIBDate, formatWIBTime, normalizeWhatsAppNumber } from '@/lib/utils';
 import { Client, Booking } from '@/types/database';
 
 export const dynamic = 'force-dynamic';
@@ -219,7 +219,7 @@ export default function AdminKlienPage() {
 
                   <div className="flex items-center gap-2">
                     <a
-                      href={`https://wa.me/${(selectedClient.phone_normalized || selectedClient.phone).replace(/\D/g, '')}`}
+                      href={`https://wa.me/${normalizeWhatsAppNumber(selectedClient.phone_normalized || selectedClient.phone)}`}
                       target="_blank"
                       rel="noopener noreferrer"
                       className="py-1.5 px-3 rounded-xl bg-emerald-50 border border-emerald-300 text-emerald-700 text-xs font-semibold flex items-center gap-1.5"

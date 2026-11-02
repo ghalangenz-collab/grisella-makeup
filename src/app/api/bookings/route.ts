@@ -18,6 +18,9 @@ export async function POST(request: NextRequest) {
       service_location,
       address,
       address_benchmark,
+      location_map_url,
+      gps_latitude,
+      gps_longitude,
       transport_fee = 0,
       date, // YYYY-MM-DD
       start_time, // HH:mm
@@ -74,21 +77,34 @@ export async function POST(request: NextRequest) {
     let price = 0;
     let selectedService = null;
 
-    if (makeup_type !== 'Lainnya') {
-      selectedService = storedServices.find((s) => s.id === service_id || s.name.toLowerCase().includes(makeup_type.toLowerCase()));
-      price = selectedService ? selectedService.price : 400000;
+    const isCustom =
+      (makeup_type || '').toLowerCase().includes('lainnya') ||
+      (custom_request && custom_request.trim().length > 0 && !service_id);
+
+    if (!isCustom) {
+      selectedService = storedServices.find(
+        (s) => s.id === service_id || s.name.toLowerCase() === (makeup_type || '').toLowerCase()
+      );
+      price = selectedService ? selectedService.price : 450000;
     }
 
     const transportAmount = service_location === 'home' ? Number(transport_fee) || 0 : 0;
-    const totalPrice = makeup_type === 'Lainnya' ? 0 : price + transportAmount;
+    const totalPrice = isCustom || price === 0 ? 0 : price + transportAmount;
 
     const dpPercentage = parseInt(storedSettings.dp_percentage || '30', 10);
-    const dpAmount = makeup_type === 'Lainnya' ? 0 : Math.round((totalPrice * dpPercentage) / 100);
+    const dpAmount = isCustom || totalPrice === 0 ? 0 : Math.round((totalPrice * dpPercentage) / 100);
 
-    const isCustom = makeup_type === 'Lainnya';
-    const status = isCustom ? 'menunggu_konfirmasi' : 'menunggu_pembayaran';
+    const status = isCustom || totalPrice === 0 ? 'menunggu_konfirmasi' : 'menunggu_pembayaran';
     const publicToken = generateBookingToken();
-    const expiresAt = isCustom ? null : new Date(Date.now() + 30 * 60 * 1000).toISOString();
+    const expiresAt = isCustom || totalPrice === 0 ? null : new Date(Date.now() + 30 * 60 * 1000).toISOString();
+
+    // Pastikan benchmark memuat info GPS link jika ada, sebagai fallback permanen
+    let benchmarkWithGps = address_benchmark || '';
+    if (location_map_url && !benchmarkWithGps.includes(location_map_url)) {
+      benchmarkWithGps = benchmarkWithGps
+        ? `${benchmarkWithGps} | Pin GPS: ${location_map_url}`
+        : `Pin GPS: ${location_map_url}`;
+    }
 
     // 5. Upsert Data Klien ke local storage
     const savedClient = upsertStoredClient({
@@ -110,7 +126,10 @@ export async function POST(request: NextRequest) {
       custom_request: custom_request || null,
       service_location,
       address: service_location === 'home' ? address : (storedSettings.studio_address || 'Studio Grisella Makeup'),
-      address_benchmark: address_benchmark || null,
+      address_benchmark: benchmarkWithGps || null,
+      location_map_url: location_map_url || null,
+      gps_latitude: gps_latitude !== undefined ? gps_latitude : null,
+      gps_longitude: gps_longitude !== undefined ? gps_longitude : null,
       notes: notes || null,
       start_at: startAtISO,
       end_at: endAtISO,
@@ -136,35 +155,124 @@ export async function POST(request: NextRequest) {
 
     upsertStoredBooking(newBooking);
 
-    // 7. Best-effort Supabase sync (tidak memblokir flow jika Supabase offline/error)
+    // 7. Sinkronisasi ke Supabase (Database Utama untuk sinkron multi-device HP/laptop/tab)
     try {
       const supabase = createAdminClient();
-      await supabase.from('clients').upsert({
-        name: client_name.trim(),
-        phone: client_phone.trim(),
-        phone_normalized: phoneNormalized,
-        source: source || 'Lainnya',
-      });
 
-      await supabase.from('bookings').insert({
-        public_token: publicToken,
-        client_id: clientId,
-        service_id: service_id || null,
-        makeup_type,
-        custom_request: custom_request || null,
-        service_location,
-        address: newBooking.address,
-        address_benchmark: address_benchmark || null,
-        notes: notes || null,
-        start_at: startAtISO,
-        end_at: endAtISO,
-        status,
-        total_price: totalPrice,
-        transport_fee: transportAmount,
-        dp_amount: dpAmount,
-        source: source || 'Lainnya',
-        expires_at: expiresAt,
-      });
+      // Dapatkan atau buat client di Supabase dengan UUID yang valid
+      let sbClientId: string | null = null;
+      try {
+        const { data: existingClient } = await supabase
+          .from('clients')
+          .select('id')
+          .eq('phone_normalized', phoneNormalized)
+          .maybeSingle();
+
+        if (existingClient?.id) {
+          sbClientId = existingClient.id;
+          await supabase
+            .from('clients')
+            .update({ name: client_name.trim(), updated_at: new Date().toISOString() })
+            .eq('id', sbClientId);
+        } else {
+          const { data: newClient, error: clientInsertErr } = await supabase
+            .from('clients')
+            .insert({
+              name: client_name.trim(),
+              phone: client_phone.trim(),
+              phone_normalized: phoneNormalized,
+              source: source || 'Lainnya',
+            })
+            .select('id')
+            .single();
+
+          if (!clientInsertErr && newClient?.id) {
+            sbClientId = newClient.id;
+          }
+        }
+      } catch (clientErr) {
+        console.warn('Supabase client upsert error:', clientErr);
+      }
+
+      if (sbClientId) {
+        // Cek apakah service_id valid dan ada di Supabase untuk mencegah foreign key violation
+        let validServiceId: string | null = null;
+        if (service_id) {
+          const isUuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(service_id);
+          if (isUuid) {
+            try {
+              const { data: svcExists } = await supabase
+                .from('services')
+                .select('id')
+                .eq('id', service_id)
+                .maybeSingle();
+              if (svcExists?.id) {
+                validServiceId = svcExists.id;
+              }
+            } catch (svcErr) {
+              console.warn('Check service_id in Supabase error:', svcErr);
+            }
+          }
+        }
+
+        // Coba insert booking dengan semua kolom GPS
+        const bookingPayload: Record<string, any> = {
+          public_token: publicToken,
+          client_id: sbClientId,
+          service_id: validServiceId,
+          makeup_type,
+          custom_request: custom_request || null,
+          service_location,
+          address: newBooking.address,
+          address_benchmark: benchmarkWithGps || null,
+          notes: notes || null,
+          start_at: startAtISO,
+          end_at: endAtISO,
+          status,
+          total_price: totalPrice,
+          transport_fee: transportAmount,
+          dp_amount: dpAmount,
+          source: source || 'Lainnya',
+          expires_at: expiresAt,
+          location_map_url: location_map_url || null,
+          gps_latitude: gps_latitude !== undefined ? gps_latitude : null,
+          gps_longitude: gps_longitude !== undefined ? gps_longitude : null,
+        };
+
+        const { error: bookingInsertErr } = await supabase.from('bookings').insert(bookingPayload);
+
+        // Jika gagal karena kolom baru belum dimigrasi di remote, retry dengan kolom standar
+        if (bookingInsertErr) {
+          console.warn('Retrying insert without optional GPS columns:', bookingInsertErr.message);
+          const fallbackPayload = {
+            public_token: publicToken,
+            client_id: sbClientId,
+            service_id: validServiceId,
+            makeup_type,
+            custom_request: custom_request || null,
+            service_location,
+            address: newBooking.address,
+            address_benchmark: benchmarkWithGps || null,
+            notes: notes || null,
+            start_at: startAtISO,
+            end_at: endAtISO,
+            status,
+            total_price: totalPrice,
+            transport_fee: transportAmount,
+            dp_amount: dpAmount,
+            source: source || 'Lainnya',
+            expires_at: expiresAt,
+          };
+          const { error: retryErr } = await supabase.from('bookings').insert(fallbackPayload);
+          if (retryErr) {
+            console.warn('Fallback insert with validServiceId failed, trying with service_id null:', retryErr.message);
+            await supabase.from('bookings').insert({
+              ...fallbackPayload,
+              service_id: null,
+            });
+          }
+        }
+      }
     } catch (e) {
       console.warn('Supabase booking sync skipped:', e);
     }
@@ -183,6 +291,7 @@ export async function POST(request: NextRequest) {
         total_price: totalPrice,
         dp_amount: dpAmount,
         expires_at: expiresAt,
+        location_map_url,
       },
     });
   } catch (error) {

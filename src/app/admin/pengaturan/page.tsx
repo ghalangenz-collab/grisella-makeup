@@ -20,7 +20,7 @@ import {
 } from 'lucide-react';
 import { DEFAULT_SETTINGS } from '@/lib/constants';
 import { BankAccount } from '@/types/database';
-import { formatRupiah } from '@/lib/utils';
+import { formatRupiah, normalizeWhatsAppNumber } from '@/lib/utils';
 
 export const dynamic = 'force-dynamic';
 
@@ -172,11 +172,15 @@ export default function AdminPengaturanPage() {
     setLoading(true);
 
     try {
+      const cleanWa = normalizeWhatsAppNumber(settings.mua_whatsapp);
+
       const payloadSettings = {
         ...settings,
+        mua_whatsapp: cleanWa,
         bank_accounts: JSON.stringify(bankAccounts),
         transport_fee_zones: JSON.stringify(transportZones),
       };
+      setSettings((prev) => ({ ...prev, mua_whatsapp: cleanWa }));
 
       const res = await fetch('/api/admin/settings', {
         method: 'POST',
@@ -620,8 +624,21 @@ export default function AdminPengaturanPage() {
                 className="w-full p-2.5 rounded-xl border border-[#EBDCD5] bg-white font-mono text-[#2D2424]"
               />
               <span className="text-[10px] text-[#9C8E8F] mt-1 block">
-                Gunakan awalan 62 (tanpa tanda + dan spasi). Klien akan langsung dialihkan ke nomor ini.
+                Bebas format: 0812..., +62812..., atau 62812... Sistem otomatis menormalkan ke format internasional.
               </span>
+              {settings.mua_whatsapp && (
+                <div className="mt-2">
+                  <a
+                    href={`https://wa.me/${normalizeWhatsAppNumber(settings.mua_whatsapp)}?text=${encodeURIComponent('Halo kak Grisella (Uji coba link WhatsApp MUA)')}`}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="inline-flex items-center gap-1.5 text-[11px] font-semibold text-emerald-800 bg-emerald-50 hover:bg-emerald-100 border border-emerald-300 px-3 py-1 rounded-xl transition-colors cursor-pointer"
+                  >
+                    <span>💬 Tes Buka Chat WhatsApp Nomor Ini</span>
+                    <ExternalLink className="w-3 h-3 text-emerald-600" />
+                  </a>
+                </div>
+              )}
             </div>
 
             <div>

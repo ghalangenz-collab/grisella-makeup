@@ -7,8 +7,21 @@ export const dynamic = 'force-dynamic';
 
 export async function GET() {
   try {
-    const settings = getStoredSettings();
-    return NextResponse.json({ settings });
+    const localSettings = getStoredSettings();
+    try {
+      const supabase = createAdminClient();
+      const { data, error } = await supabase.from('settings').select('*');
+      if (!error && data && data.length > 0) {
+        const remoteMap: Record<string, string> = { ...localSettings };
+        data.forEach((row: any) => {
+          remoteMap[row.key] = row.value;
+        });
+        return NextResponse.json({ settings: remoteMap });
+      }
+    } catch (e) {
+      console.warn('Supabase settings fetch skipped:', e);
+    }
+    return NextResponse.json({ settings: localSettings });
   } catch (error) {
     console.error('Error fetching settings:', error);
     return NextResponse.json({ settings: {} }, { status: 500 });
@@ -27,7 +40,7 @@ export async function POST(request: NextRequest) {
     // 1. Save directly to local storage
     const saved = saveStoredSettings(settings);
 
-    // 2. Best-effort Supabase sync with 1.5s timeout
+    // 2. Best-effort Supabase sync
     try {
       const supabase = createAdminClient();
       const updates = Object.entries(settings).map(([key, value]) => ({
@@ -35,10 +48,10 @@ export async function POST(request: NextRequest) {
         value: String(value),
         updated_at: new Date().toISOString(),
       }));
-      await Promise.race([
-        supabase.from('settings').upsert(updates),
-        new Promise((_, reject) => setTimeout(() => reject(new Error('timeout')), 1500)),
-      ]);
+      const { error: upsertErr } = await supabase.from('settings').upsert(updates);
+      if (upsertErr) {
+        console.warn('Supabase settings upsert warning:', upsertErr.message);
+      }
     } catch (e) {
       console.warn('Supabase settings upsert skipped:', e);
     }

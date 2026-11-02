@@ -18,7 +18,7 @@ import {
   Eye,
   X,
 } from 'lucide-react';
-import { formatRupiah, formatWIBDate, formatWIBTime } from '@/lib/utils';
+import { formatRupiah, formatWIBDate, formatWIBTime, normalizeWhatsAppNumber } from '@/lib/utils';
 import { Booking } from '@/types/database';
 
 export const dynamic = 'force-dynamic';
@@ -79,10 +79,11 @@ export default function AdminDashboardPage() {
   };
 
   const openWhatsApp = (phone: string, name: string) => {
+    const cleanPhone = normalizeWhatsAppNumber(phone);
     const text = encodeURIComponent(
       `Halo kak ${name}! ✨ Saya Grisella Makeup, menghubungi terkait jadwal makeup kak ${name}. Ada yang bisa saya bantu persiapkan? 💕`
     );
-    window.open(`https://wa.me/${phone.replace(/\D/g, '')}?text=${text}`, '_blank');
+    window.open(`https://wa.me/${cleanPhone}?text=${text}`, '_blank');
   };
 
   return (

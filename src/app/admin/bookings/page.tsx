@@ -1,12 +1,10 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useEffect, useState, useRef } from 'react';
 import {
   Search,
   CheckCircle2,
   Clock,
-  HelpCircle,
-  XCircle,
   Building2,
   Home,
   MessageCircle,
@@ -15,12 +13,19 @@ import {
   Eye,
   AlertCircle,
   Sparkles,
-  Phone,
-  Calendar,
-  DollarSign,
+  Navigation,
+  ExternalLink,
+  BellRing,
 } from 'lucide-react';
-import { formatRupiah, formatWIBDate, formatWIBTime } from '@/lib/utils';
+import {
+  formatRupiah,
+  formatWIBDate,
+  formatWIBTime,
+  normalizeWhatsAppNumber,
+  playNotificationSound,
+} from '@/lib/utils';
 import { Booking, BookingStatus } from '@/types/database';
+import { createClient } from '@/lib/supabase/client';
 
 export const dynamic = 'force-dynamic';
 
@@ -33,7 +38,6 @@ export default function AdminBookingsPage() {
 
   // Form custom harga/durasi
   const [customPrice, setCustomPrice] = useState<number>(0);
-  const [customDuration, setCustomDuration] = useState<number>(90);
 
   // Form pelunasan
   const [settlementAmount, setSettlementAmount] = useState<number>(0);
@@ -43,13 +47,79 @@ export default function AdminBookingsPage() {
   const [loading, setLoading] = useState(false);
   const [toastMessage, setToastMessage] = useState<string | null>(null);
 
+  // Realtime notification banner
+  const [liveAlert, setLiveAlert] = useState<{
+    title: string;
+    message: string;
+    type: 'booking' | 'dp';
+  } | null>(null);
+
+  const prevBookingsRef = useRef<Booking[]>([]);
+
   const showToast = (msg: string) => {
     setToastMessage(msg);
     setTimeout(() => setToastMessage(null), 3500);
   };
 
+  const showLiveAlert = (title: string, message: string, type: 'booking' | 'dp') => {
+    setLiveAlert({ title, message, type });
+    playNotificationSound();
+    setTimeout(() => setLiveAlert(null), 6000);
+  };
+
+  const fetchBookings = (isInitial = false) => {
+    fetch('/api/admin/bookings')
+      .then((res) => res.json())
+      .then((data) => {
+        if (data.bookings && Array.isArray(data.bookings)) {
+          const freshList: Booking[] = data.bookings;
+
+          // Cek apakah ada booking baru atau bukti DP baru yang masuk dibanding list sebelumnya
+          if (!isInitial && prevBookingsRef.current.length > 0) {
+            const oldTokens = new Set(prevBookingsRef.current.map((b) => b.public_token || b.id));
+            const brandNew = freshList.filter((b) => !oldTokens.has(b.public_token || b.id));
+
+            if (brandNew.length > 0) {
+              const latest = brandNew[0];
+              showLiveAlert(
+                '🔔 Booking Baru Diterima!',
+                `${latest.client?.name || 'Klien'} telah memesan ${latest.makeup_type}`,
+                'booking'
+              );
+            }
+
+            // Cek bukti DP yang baru diunggah
+            const oldVerifying = new Set(
+              prevBookingsRef.current
+                .filter((b) => b.status === 'menunggu_verifikasi')
+                .map((b) => b.public_token || b.id)
+            );
+            const newlyVerifying = freshList.filter(
+              (b) =>
+                b.status === 'menunggu_verifikasi' &&
+                !oldVerifying.has(b.public_token || b.id) &&
+                !brandNew.some((bn) => (bn.public_token || bn.id) === (b.public_token || b.id))
+            );
+
+            if (newlyVerifying.length > 0) {
+              const latestDp = newlyVerifying[0];
+              showLiveAlert(
+                '💰 Bukti Transfer DP Diunggah!',
+                `${latestDp.client?.name || 'Klien'} telah mengirim bukti transfer DP`,
+                'dp'
+              );
+            }
+          }
+
+          prevBookingsRef.current = freshList;
+          setBookings(freshList);
+        }
+      })
+      .catch((err) => console.error('Failed to load bookings:', err));
+  };
+
   useEffect(() => {
-    fetchBookings();
+    fetchBookings(true);
 
     fetch('/api/admin/settings')
       .then((res) => res.json())
@@ -66,18 +136,59 @@ export default function AdminBookingsPage() {
         setFilterStatus(urlStatus);
       }
     }
-  }, []);
 
-  const fetchBookings = () => {
-    fetch('/api/admin/bookings')
-      .then((res) => res.json())
-      .then((data) => {
-        if (data.bookings && Array.isArray(data.bookings)) {
-          setBookings(data.bookings);
-        }
-      })
-      .catch((err) => console.error('Failed to load bookings:', err));
-  };
+    // 1. SUPABASE REALTIME SUBSCRIPTION (Sync antar-perangkat HP / Laptop / Tablet)
+    let channel: any = null;
+    try {
+      const supabase = createClient();
+      channel = supabase
+        .channel('admin-bookings-sync')
+        .on(
+          'postgres_changes',
+          { event: '*', schema: 'public', table: 'bookings' },
+          (payload) => {
+            console.log('Realtime change received from other device:', payload);
+            fetchBookings();
+            if (payload.eventType === 'INSERT') {
+              showLiveAlert(
+                '🔔 Reservasi Baru Masuk!',
+                'Ada booking baru terdeteksi secara real-time dari device lain.',
+                'booking'
+              );
+            } else if (
+              payload.eventType === 'UPDATE' &&
+              ((payload.new as any)?.status === 'menunggu_verifikasi' ||
+                (payload.new as any)?.payment_receipt_url ||
+                ((payload.new as any)?.notes && String((payload.new as any).notes).includes('[BUKTI DP:')))
+            ) {
+              showLiveAlert(
+                '💰 Bukti DP Baru Diunggah!',
+                'Klien telah mengunggah struk transfer DP. Segera periksa.',
+                'dp'
+              );
+            }
+          }
+        )
+        .subscribe();
+    } catch (realtimeErr) {
+      console.warn('Realtime channel setup skipped:', realtimeErr);
+    }
+
+    // 2. BACKGROUND POLLING FALLBACK (Setiap 7 detik untuk menjamin sinkronisasi 100% tanpa delay)
+    const pollInterval = setInterval(() => {
+      fetchBookings();
+    }, 7000);
+
+    return () => {
+      clearInterval(pollInterval);
+      if (channel) {
+        try {
+          const supabase = createClient();
+          supabase.removeChannel(channel);
+        } catch {}
+      }
+    };
+  }, []);
 
   const handleUpdateStatus = async (bookingId: string, newStatus: BookingStatus) => {
     setLoading(true);
@@ -95,15 +206,9 @@ export default function AdminBookingsPage() {
 
       if (!res.ok) throw new Error();
 
-      const data = await res.json();
-      if (data.booking) {
-        setBookings((prev) => prev.map((b) => (b.id === bookingId ? { ...b, ...data.booking } : b)));
-      } else {
-        fetchBookings();
-      }
-
+      fetchBookings();
       setSelectedBooking(null);
-      showToast(`Status booking berhasil diubah menjadi: ${newStatus.replace('_', ' ').toUpperCase()}`);
+      showToast(`Status booking berhasil diubah: ${newStatus.replace('_', ' ').toUpperCase()}`);
     } catch {
       alert('Gagal memperbarui status');
     } finally {
@@ -111,11 +216,13 @@ export default function AdminBookingsPage() {
     }
   };
 
-  const handleConfirmDpPayment = async () => {
-    if (!selectedBooking) return;
+  const handleConfirmDpPayment = async (targetBooking?: Booking) => {
+    const b = targetBooking || selectedBooking;
+    if (!b) return;
+
     setLoading(true);
     try {
-      const res = await fetch(`/api/admin/bookings/${selectedBooking.id}`, {
+      const res = await fetch(`/api/admin/bookings/${b.id}`, {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -126,15 +233,11 @@ export default function AdminBookingsPage() {
 
       if (!res.ok) throw new Error();
 
-      const data = await res.json();
-      if (data.booking) {
-        setBookings((prev) => prev.map((b) => (b.id === selectedBooking.id ? { ...b, ...data.booking } : b)));
-      } else {
-        fetchBookings();
+      fetchBookings();
+      if (selectedBooking?.id === b.id) {
+        setSelectedBooking(null);
       }
-
-      setSelectedBooking(null);
-      showToast('Pembayaran DP berhasil dikonfirmasi! Jadwal otomatis terkunci. ✨');
+      showToast(`Pembayaran DP untuk ${b.client?.name || 'Klien'} berhasil dikonfirmasi! Jadwal terkunci. ✨`);
     } catch {
       alert('Gagal mengonfirmasi pembayaran DP');
     } finally {
@@ -161,13 +264,7 @@ export default function AdminBookingsPage() {
 
       if (!res.ok) throw new Error();
 
-      const data = await res.json();
-      if (data.booking) {
-        setBookings((prev) => prev.map((b) => (b.id === selectedBooking.id ? { ...b, ...data.booking } : b)));
-      } else {
-        fetchBookings();
-      }
-
+      fetchBookings();
       setSelectedBooking(null);
       showToast('Tarif kustom disetujui! Tagihan DP telah diterbitkan untuk klien.');
     } catch {
@@ -194,13 +291,7 @@ export default function AdminBookingsPage() {
 
       if (!res.ok) throw new Error();
 
-      const data = await res.json();
-      if (data.booking) {
-        setBookings((prev) => prev.map((b) => (b.id === selectedBooking.id ? { ...b, ...data.booking } : b)));
-      } else {
-        fetchBookings();
-      }
-
+      fetchBookings();
       setSelectedBooking(null);
       showToast('Pelunasan dicatat & layanan selesai! ✨');
     } catch {
@@ -212,11 +303,12 @@ export default function AdminBookingsPage() {
 
   const openWhatsApp = (b: Booking) => {
     const phone = b.client?.phone || '';
+    const cleanPhone = normalizeWhatsAppNumber(phone);
     const name = b.client?.name || 'Kak';
     const text = encodeURIComponent(
       `Halo kak ${name}! ✨ Saya Grisella Makeup, menghubungi terkait pesanan makeup ${b.makeup_type} (Kode: ${b.public_token}). Ada yang ingin dikonsultasikan? 💕`
     );
-    window.open(`https://wa.me/${phone.replace(/\D/g, '')}?text=${text}`, '_blank');
+    window.open(`https://wa.me/${cleanPhone}?text=${text}`, '_blank');
   };
 
   const filteredBookings = bookings.filter((b) => {
@@ -256,6 +348,25 @@ export default function AdminBookingsPage() {
         </div>
       )}
 
+      {/* Floating Realtime Live Alert Banner */}
+      {liveAlert && (
+        <div className="fixed top-6 left-1/2 -translate-x-1/2 z-50 flex items-center gap-3 bg-amber-500 text-white text-xs font-semibold px-5 py-3.5 rounded-full shadow-2xl border-2 border-amber-300 animate-in bounce-in duration-300">
+          <div className="w-7 h-7 rounded-full bg-white/20 flex items-center justify-center animate-ping">
+            <BellRing className="w-4 h-4 text-white" />
+          </div>
+          <div>
+            <span className="block font-bold">{liveAlert.title}</span>
+            <span className="text-[11px] text-amber-100 font-normal">{liveAlert.message}</span>
+          </div>
+          <button
+            onClick={() => setLiveAlert(null)}
+            className="ml-2 p-1 hover:bg-white/20 rounded-full"
+          >
+            <X className="w-3.5 h-3.5" />
+          </button>
+        </div>
+      )}
+
       {/* Title & Filter Header */}
       <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
         <div>
@@ -265,7 +376,7 @@ export default function AdminBookingsPage() {
           </div>
           <h1 className="font-serif text-2xl font-bold text-[#2D2424]">Daftar Booking Masuk</h1>
           <p className="text-xs text-[#635354] mt-0.5">
-            Pantau reservasi klien, verifikasi bukti transfer DP, dan catat pelunasan di hari H.
+            Pantau reservasi real-time klien, verifikasi bukti transfer DP, dan rute lokasi GPS Google Maps.
           </p>
         </div>
 
@@ -284,23 +395,23 @@ export default function AdminBookingsPage() {
 
       {/* Urgent Notice for Pending Verifications */}
       {waitingVerificationCount > 0 && (
-        <div className="p-4 bg-amber-50 border-2 border-amber-300 rounded-3xl flex items-center justify-between gap-3 shadow-xs">
+        <div className="p-4 bg-amber-50 border-2 border-amber-300 rounded-3xl flex items-center justify-between gap-3 shadow-xs animate-in fade-in duration-300">
           <div className="flex items-center gap-3">
             <div className="w-9 h-9 rounded-2xl bg-amber-100 flex items-center justify-center text-amber-800 shrink-0">
-              <FileCheck className="w-5 h-5 animate-pulse" />
+              <FileCheck className="w-5 h-5 animate-pulse text-amber-700" />
             </div>
             <div>
               <h3 className="font-bold text-xs text-amber-950">
                 Ada {waitingVerificationCount} bukti transfer DP menunggu konfirmasi MUA!
               </h3>
               <p className="text-[11px] text-amber-800 mt-0.5">
-                Klien telah mengunggah struk transfer. Segera periksa dan konfirmasi agar jadwalnya terkunci.
+                Klien telah mengunggah struk transfer. Segera periksa dan konfirmasi agar jadwalnya otomatis terkunci.
               </p>
             </div>
           </div>
           <button
             onClick={() => setFilterStatus('menunggu_verifikasi')}
-            className="shrink-0 py-2 px-3.5 rounded-xl bg-amber-600 hover:bg-amber-700 text-white font-semibold text-xs transition-colors"
+            className="shrink-0 py-2 px-3.5 rounded-xl bg-amber-600 hover:bg-amber-700 text-white font-semibold text-xs transition-colors cursor-pointer"
           >
             Tampilkan
           </button>
@@ -341,16 +452,25 @@ export default function AdminBookingsPage() {
               const isStudio = b.service_location === 'studio';
               const hasReceipt = Boolean(b.payment_receipt_url);
 
+              // Ambil link Google Maps jika Home Service
+              const gmapsLink =
+                b.location_map_url ||
+                (b.gps_latitude && b.gps_longitude
+                  ? `https://www.google.com/maps?q=${b.gps_latitude},${b.gps_longitude}`
+                  : b.address
+                  ? `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(b.address)}`
+                  : null);
+
               return (
                 <div
                   key={b.id}
-                  className={`p-4 rounded-2xl border transition-all flex flex-col md:flex-row md:items-center justify-between gap-4 ${
+                  className={`p-4 rounded-3xl border-2 transition-all flex flex-col md:flex-row md:items-center justify-between gap-4 ${
                     b.status === 'menunggu_verifikasi'
-                      ? 'border-amber-300 bg-amber-50/40 ring-1 ring-amber-200'
+                      ? 'border-amber-400 bg-amber-50/60 shadow-md ring-1 ring-amber-300'
                       : 'border-[#EBDCD5] hover:border-[#C97A7E]/50 bg-[#FDFBF7]'
                   }`}
                 >
-                  <div className="space-y-1.5">
+                  <div className="space-y-2 flex-1">
                     <div className="flex flex-wrap items-center gap-2">
                       <span className="font-bold text-sm text-[#2D2424]">
                         {b.client?.name || 'Klien'}
@@ -370,9 +490,9 @@ export default function AdminBookingsPage() {
 
                       {/* Status Badges */}
                       {b.status === 'menunggu_verifikasi' && (
-                        <span className="text-[10px] font-bold bg-amber-100 text-amber-900 border border-amber-300 px-2.5 py-0.5 rounded-full flex items-center gap-1">
-                          <Clock className="w-3 h-3 text-amber-700 animate-spin" />
-                          <span>MENUNGGU VERIFIKASI DP</span>
+                        <span className="text-[10px] font-bold bg-amber-400 text-amber-950 px-2.5 py-0.5 rounded-full flex items-center gap-1 shadow-xs animate-pulse">
+                          <Clock className="w-3 h-3" />
+                          <span>BUKTI DP MENUNGGU VERIFIKASI</span>
                         </span>
                       )}
                       {b.status === 'dikonfirmasi' && (
@@ -410,8 +530,12 @@ export default function AdminBookingsPage() {
                     </p>
 
                     <div className="flex flex-wrap items-center gap-3 text-[11px] text-[#635354]">
-                      <span>Total: <strong className="text-[#2D2424]">{formatRupiah(b.total_price)}</strong></span>
-                      <span>DP: <strong className="text-[#8C4247]">{formatRupiah(b.dp_amount)}</strong></span>
+                      <span>
+                        Total: <strong className="text-[#2D2424]">{formatRupiah(b.total_price)}</strong>
+                      </span>
+                      <span>
+                        DP: <strong className="text-[#8C4247]">{formatRupiah(b.dp_amount)}</strong>
+                      </span>
                       {b.status === 'dikonfirmasi' && (
                         <span className="text-amber-900 bg-amber-50 px-2 py-0.5 rounded-md">
                           Sisa Pelunasan: <strong>{formatRupiah(b.total_price - b.dp_amount)}</strong>
@@ -419,31 +543,87 @@ export default function AdminBookingsPage() {
                       )}
                     </div>
 
+                    {/* ALAMAT & GOOGLE MAPS TITIK GPS */}
+                    {!isStudio && (
+                      <div className="p-2.5 bg-white border border-[#EBDCD5] rounded-xl text-xs space-y-1.5 mt-1">
+                        <div className="flex items-start justify-between gap-2">
+                          <div className="space-y-0.5">
+                            <span className="text-[10px] text-[#9C8E8F] uppercase tracking-wider block font-semibold">
+                              Lokasi Klien:
+                            </span>
+                            <p className="text-xs text-[#2D2424] leading-relaxed">
+                              {b.address || 'Alamat klien'}
+                            </p>
+                            {b.address_benchmark && (
+                              <p className="text-[11px] text-[#8A797A] italic">
+                                Patokan: {b.address_benchmark}
+                              </p>
+                            )}
+                          </div>
+
+                          {gmapsLink && (
+                            <a
+                              href={gmapsLink}
+                              target="_blank"
+                              rel="noopener noreferrer"
+                              className="shrink-0 inline-flex items-center gap-1.5 py-1.5 px-3 rounded-xl bg-purple-600 hover:bg-purple-700 text-white font-semibold text-xs shadow-xs transition-all cursor-pointer"
+                              title="Buka rute navigasi di Google Maps"
+                            >
+                              <Navigation className="w-3.5 h-3.5" />
+                              <span>Buka GMaps</span>
+                              <ExternalLink className="w-3 h-3" />
+                            </a>
+                          )}
+                        </div>
+
+                        {b.gps_latitude && b.gps_longitude && (
+                          <div className="text-[10px] text-purple-700 font-mono flex items-center gap-1">
+                            <span>📍 Titik Presisi: {b.gps_latitude.toFixed(5)}, {b.gps_longitude.toFixed(5)}</span>
+                          </div>
+                        )}
+                      </div>
+                    )}
+
+                    {/* BUKTI TRANSFER DP HIGHLIGHT */}
                     {hasReceipt && (
-                      <div className="pt-1 flex items-center gap-2">
+                      <div className="pt-1 flex flex-wrap items-center gap-2.5">
                         <button
                           type="button"
                           onClick={() => setViewingReceiptUrl(b.payment_receipt_url!)}
-                          className="inline-flex items-center gap-1 text-[11px] font-semibold text-emerald-800 bg-emerald-50 hover:bg-emerald-100 border border-emerald-300 px-2.5 py-1 rounded-xl transition-colors cursor-pointer"
+                          className="inline-flex items-center gap-1.5 text-xs font-bold text-amber-900 bg-amber-100 hover:bg-amber-200 border border-amber-300 px-3 py-1.5 rounded-xl transition-all cursor-pointer shadow-xs"
                         >
-                          <Eye className="w-3.5 h-3.5" />
-                          <span>Lihat Bukti Transfer DP</span>
+                          <Eye className="w-3.5 h-3.5 text-amber-700" />
+                          <span>Lihat Struk Transfer DP</span>
                         </button>
+
                         {b.payment_sender_name && (
-                          <span className="text-[11px] text-[#635354]">
-                            (Pengirim: {b.payment_sender_name})
+                          <span className="text-xs font-semibold text-amber-900 bg-amber-50 px-2.5 py-1 rounded-lg border border-amber-200">
+                            Pengirim: {b.payment_sender_name} ({b.payment_bank_name || 'Bank'})
                           </span>
+                        )}
+
+                        {/* Quick Confirm DP Button */}
+                        {b.status === 'menunggu_verifikasi' && (
+                          <button
+                            type="button"
+                            onClick={() => handleConfirmDpPayment(b)}
+                            disabled={loading}
+                            className="inline-flex items-center gap-1.5 text-xs font-bold text-white bg-emerald-600 hover:bg-emerald-700 px-3 py-1.5 rounded-xl transition-all cursor-pointer shadow-xs active:scale-95"
+                          >
+                            <CheckCircle2 className="w-3.5 h-3.5" />
+                            <span>Terima & Verifikasi DP</span>
+                          </button>
                         )}
                       </div>
                     )}
                   </div>
 
                   {/* Action Buttons */}
-                  <div className="flex items-center gap-2 pt-2 md:pt-0 border-t md:border-t-0 border-[#F1DADF]">
+                  <div className="flex md:flex-col items-center md:items-end gap-2 pt-2 md:pt-0 border-t md:border-t-0 border-[#F1DADF]">
                     {b.client?.phone && (
                       <button
                         onClick={() => openWhatsApp(b)}
-                        className="py-2 px-3 rounded-xl bg-white border border-[#25D366] text-[#25D366] hover:bg-emerald-50 text-xs font-semibold flex items-center gap-1.5 transition-colors cursor-pointer"
+                        className="py-2 px-3 rounded-xl bg-white border border-[#25D366] text-[#25D366] hover:bg-emerald-50 text-xs font-semibold flex items-center gap-1.5 transition-colors cursor-pointer w-full md:w-auto justify-center"
                         title="Chat Klien di WhatsApp"
                       >
                         <MessageCircle className="w-3.5 h-3.5" />
@@ -457,7 +637,7 @@ export default function AdminBookingsPage() {
                         setCustomPrice(b.total_price || 450000);
                         setSettlementAmount(b.total_price - b.dp_amount);
                       }}
-                      className="py-2 px-4 rounded-xl bg-[#C97A7E] hover:bg-[#B5676B] text-white text-xs font-semibold shadow-xs transition-colors cursor-pointer"
+                      className="py-2 px-4 rounded-xl bg-[#C97A7E] hover:bg-[#B5676B] text-white text-xs font-semibold shadow-xs transition-colors cursor-pointer w-full md:w-auto text-center"
                     >
                       Kelola & Detail
                     </button>
@@ -480,7 +660,7 @@ export default function AdminBookingsPage() {
               </div>
               <button
                 onClick={() => setSelectedBooking(null)}
-                className="p-1 rounded-xl text-[#635354] hover:bg-[#FAEDF0]"
+                className="p-1 rounded-xl text-[#635354] hover:bg-[#FAEDF0] cursor-pointer"
               >
                 <X className="w-5 h-5" />
               </button>
@@ -510,6 +690,30 @@ export default function AdminBookingsPage() {
                   {selectedBooking.service_location === 'studio' ? 'Studio Grisella Makeup' : selectedBooking.address}
                 </span>
               </div>
+
+              {/* Titik Google Maps */}
+              {selectedBooking.service_location === 'home' && (
+                <div className="pt-2 border-t border-[#F1DADF] flex items-center justify-between">
+                  <span className="text-[#635354]">Titik GPS GMaps:</span>
+                  {selectedBooking.location_map_url || (selectedBooking.gps_latitude && selectedBooking.gps_longitude) ? (
+                    <a
+                      href={
+                        selectedBooking.location_map_url ||
+                        `https://www.google.com/maps?q=${selectedBooking.gps_latitude},${selectedBooking.gps_longitude}`
+                      }
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="text-xs font-bold text-purple-700 underline flex items-center gap-1"
+                    >
+                      <span>Buka di Google Maps</span>
+                      <ExternalLink className="w-3.5 h-3.5" />
+                    </a>
+                  ) : (
+                    <span className="text-[#9C8E8F] italic">Tidak ada titik GPS tersimpan</span>
+                  )}
+                </div>
+              )}
+
               {selectedBooking.custom_request && (
                 <div className="p-2.5 bg-[#FAEDF0] rounded-xl text-[11px] text-[#8C4247] mt-1">
                   <strong>Permintaan Kustom:</strong> &ldquo;{selectedBooking.custom_request}&rdquo;
@@ -517,7 +721,7 @@ export default function AdminBookingsPage() {
               )}
             </div>
 
-            {/* KHUSUS: BUKTI TRANSFER DP (MENUNGGU VERIFIKASI) */}
+            {/* KHUSUS: BUKTI TRANSFER DP */}
             {selectedBooking.payment_receipt_url && (
               <div className="p-4 bg-amber-50 border-2 border-amber-300 rounded-2xl space-y-3">
                 <div className="flex items-center justify-between">
@@ -562,7 +766,7 @@ export default function AdminBookingsPage() {
                     <button
                       type="button"
                       onClick={() => setViewingReceiptUrl(selectedBooking.payment_receipt_url!)}
-                      className="text-[11px] text-[#C97A7E] hover:underline font-semibold"
+                      className="text-[11px] text-[#C97A7E] hover:underline font-semibold cursor-pointer"
                     >
                       Buka Foto Bukti Ukuran Penuh &rarr;
                     </button>
@@ -571,7 +775,7 @@ export default function AdminBookingsPage() {
 
                 {selectedBooking.status === 'menunggu_verifikasi' && (
                   <button
-                    onClick={handleConfirmDpPayment}
+                    onClick={() => handleConfirmDpPayment()}
                     disabled={loading}
                     className="w-full py-3 rounded-2xl bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs shadow-md flex items-center justify-center gap-2 transition-all cursor-pointer active:scale-95"
                   >
@@ -600,7 +804,7 @@ export default function AdminBookingsPage() {
                 <button
                   onClick={handleConfirmCustom}
                   disabled={loading}
-                  className="w-full py-2.5 px-4 rounded-xl bg-blue-600 hover:bg-blue-700 text-white font-semibold text-xs shadow-xs"
+                  className="w-full py-2.5 px-4 rounded-xl bg-blue-600 hover:bg-blue-700 text-white font-semibold text-xs shadow-xs cursor-pointer"
                 >
                   Setujui & Terbitkan Tagihan DP ke Klien
                 </button>
@@ -620,7 +824,7 @@ export default function AdminBookingsPage() {
                   <button
                     type="button"
                     onClick={() => setSettlementMethod('tunai')}
-                    className={`py-2 text-xs rounded-xl border font-semibold ${
+                    className={`py-2 text-xs rounded-xl border font-semibold cursor-pointer ${
                       settlementMethod === 'tunai'
                         ? 'bg-emerald-600 text-white border-emerald-600'
                         : 'bg-white border-emerald-200 text-emerald-900'
@@ -631,7 +835,7 @@ export default function AdminBookingsPage() {
                   <button
                     type="button"
                     onClick={() => setSettlementMethod('transfer')}
-                    className={`py-2 text-xs rounded-xl border font-semibold ${
+                    className={`py-2 text-xs rounded-xl border font-semibold cursor-pointer ${
                       settlementMethod === 'transfer'
                         ? 'bg-emerald-600 text-white border-emerald-600'
                         : 'bg-white border-emerald-200 text-emerald-900'
@@ -644,7 +848,7 @@ export default function AdminBookingsPage() {
                 <button
                   onClick={handleRecordSettlement}
                   disabled={loading}
-                  className="w-full py-2.5 px-4 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white font-semibold text-xs shadow-xs"
+                  className="w-full py-2.5 px-4 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white font-semibold text-xs shadow-xs cursor-pointer"
                 >
                   Tandai Lunas & Selesaikan Layanan
                 </button>
@@ -659,25 +863,25 @@ export default function AdminBookingsPage() {
               <div className="grid grid-cols-2 gap-2">
                 <button
                   onClick={() => handleUpdateStatus(selectedBooking.id, 'dikonfirmasi')}
-                  className="py-2 px-3 rounded-xl bg-emerald-100 hover:bg-emerald-200 text-emerald-800 text-xs font-semibold"
+                  className="py-2 px-3 rounded-xl bg-emerald-100 hover:bg-emerald-200 text-emerald-800 text-xs font-semibold cursor-pointer"
                 >
                   Dikonfirmasi
                 </button>
                 <button
                   onClick={() => handleUpdateStatus(selectedBooking.id, 'selesai')}
-                  className="py-2 px-3 rounded-xl bg-purple-100 hover:bg-purple-200 text-purple-800 text-xs font-semibold"
+                  className="py-2 px-3 rounded-xl bg-purple-100 hover:bg-purple-200 text-purple-800 text-xs font-semibold cursor-pointer"
                 >
                   Selesai
                 </button>
                 <button
                   onClick={() => handleUpdateStatus(selectedBooking.id, 'batal')}
-                  className="py-2 px-3 rounded-xl bg-rose-100 hover:bg-rose-200 text-rose-800 text-xs font-semibold"
+                  className="py-2 px-3 rounded-xl bg-rose-100 hover:bg-rose-200 text-rose-800 text-xs font-semibold cursor-pointer"
                 >
                   Batalkan
                 </button>
                 <button
                   onClick={() => handleUpdateStatus(selectedBooking.id, 'kedaluwarsa')}
-                  className="py-2 px-3 rounded-xl bg-zinc-100 hover:bg-zinc-200 text-zinc-800 text-xs font-semibold"
+                  className="py-2 px-3 rounded-xl bg-zinc-100 hover:bg-zinc-200 text-zinc-800 text-xs font-semibold cursor-pointer"
                 >
                   Kedaluwarsa
                 </button>
@@ -697,7 +901,7 @@ export default function AdminBookingsPage() {
               </span>
               <button
                 onClick={() => setViewingReceiptUrl(null)}
-                className="p-1 rounded-full bg-[#FAEDF0] text-[#635354]"
+                className="p-1 rounded-full bg-[#FAEDF0] text-[#635354] cursor-pointer"
               >
                 <X className="w-4 h-4" />
               </button>
@@ -712,7 +916,7 @@ export default function AdminBookingsPage() {
             </div>
             <button
               onClick={() => setViewingReceiptUrl(null)}
-              className="py-2 rounded-xl bg-[#2D2424] text-white text-xs font-semibold"
+              className="py-2 rounded-xl bg-[#2D2424] text-white text-xs font-semibold cursor-pointer"
             >
               Tutup
             </button>

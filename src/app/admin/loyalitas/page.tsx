@@ -15,7 +15,7 @@ import {
   Send,
   X,
 } from 'lucide-react';
-import { formatRupiah, formatWIBDate } from '@/lib/utils';
+import { formatRupiah, formatWIBDate, normalizeWhatsAppNumber } from '@/lib/utils';
 import { ClientLoyaltyView, LoyaltyBadge } from '@/types/database';
 
 export const dynamic = 'force-dynamic';
@@ -94,7 +94,8 @@ export default function AdminLoyalitasPage() {
     body = body.replace(/\{\{link_booking\}\}/g, window.location.origin);
 
     const phone = client.phone_normalized || client.phone;
-    window.open(`https://wa.me/${phone.replace(/\D/g, '')}?text=${encodeURIComponent(body)}`, '_blank');
+    const cleanPhone = normalizeWhatsAppNumber(phone);
+    window.open(`https://wa.me/${cleanPhone}?text=${encodeURIComponent(body)}`, '_blank');
     setSelectedClientForWa(null);
   };
 

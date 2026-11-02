@@ -1,0 +1,19 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 192 192" width="192" height="192">
+  <defs>
+    <linearGradient id="bg" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#FAEDF0"/>
+      <stop offset="50%" stop-color="#F5DAE0"/>
+      <stop offset="100%" stop-color="#C97A7E"/>
+    </linearGradient>
+    <linearGradient id="gold" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#8C4247"/>
+      <stop offset="100%" stop-color="#542528"/>
+    </linearGradient>
+  </defs>
+  <rect width="192" height="192" rx="48" fill="url(#bg)"/>
+  <circle cx="96" cy="96" r="80" fill="none" stroke="#FFFFFF" stroke-width="2" opacity="0.6"/>
+  <circle cx="96" cy="96" r="74" fill="none" stroke="#C97A7E" stroke-width="1.5" stroke-dasharray="4 3"/>
+  <path d="M96 28 L100 42 L114 46 L100 50 L96 64 L92 50 L78 46 L92 42 Z" fill="#C97A7E"/>
+  <text x="96" y="122" font-family="'Playfair Display', serif, Georgia" font-size="80" font-weight="bold" fill="url(#gold)" text-anchor="middle">G</text>
+  <text x="96" y="156" font-family="'Plus Jakarta Sans', sans-serif" font-size="14" font-weight="bold" fill="#8C4247" letter-spacing="3" text-anchor="middle">GRISELLA</text>
+</svg>

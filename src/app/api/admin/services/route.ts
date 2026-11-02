@@ -7,6 +7,20 @@ export const dynamic = 'force-dynamic';
 
 export async function GET() {
   try {
+    try {
+      const supabase = createAdminClient();
+      const { data, error } = await supabase
+        .from('services')
+        .select('*')
+        .order('price', { ascending: true });
+
+      if (!error && data && data.length > 0) {
+        return NextResponse.json({ services: data });
+      }
+    } catch (e) {
+      console.warn('Supabase services fetch skipped:', e);
+    }
+
     const services = getStoredServices();
     return NextResponse.json({ services });
   } catch (error) {
@@ -31,26 +45,39 @@ export async function POST(request: NextRequest) {
     // 1. Save directly to local storage
     const newService = upsertStoredService({
       name: body.name ? String(body.name).trim() : 'Layanan Baru',
+      category: body.category ? String(body.category).trim() : 'Bridesmaid',
       description: body.description ? String(body.description).trim() : '',
       price: priceNum,
       duration_minutes: durationNum || 60,
+      image_url: body.image_url ? String(body.image_url).trim() : null,
       is_active: body.is_active ?? true,
     });
 
-    // 2. Best-effort Supabase sync with 1.5s timeout
+    // 2. Best-effort Supabase sync with proper error checking
     try {
       const supabase = createAdminClient();
-      await Promise.race([
-        supabase.from('services').insert({
+      const { error: insertErr } = await supabase.from('services').insert({
+        id: newService.id,
+        name: newService.name,
+        category: newService.category,
+        description: newService.description,
+        price: newService.price,
+        duration_minutes: newService.duration_minutes,
+        image_url: newService.image_url,
+        is_active: newService.is_active,
+      });
+
+      if (insertErr) {
+        console.warn('Supabase service insert with new columns failed, retrying base:', insertErr.message);
+        await supabase.from('services').insert({
           id: newService.id,
           name: newService.name,
           description: newService.description,
           price: newService.price,
           duration_minutes: newService.duration_minutes,
           is_active: newService.is_active,
-        }),
-        new Promise((_, reject) => setTimeout(() => reject(new Error('timeout')), 1500)),
-      ]);
+        });
+      }
     } catch (e) {
       console.warn('Supabase service insert sync skipped:', e);
     }

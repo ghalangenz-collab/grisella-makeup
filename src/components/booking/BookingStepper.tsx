@@ -43,15 +43,18 @@ export default function BookingStepper({
   );
 
   const [formData, setFormData] = useState({
-    serviceId: defaultService.id,
-    makeupType: defaultService.name,
+    serviceId: '',
+    makeupType: '',
     customRequest: '',
-    durationMinutes: defaultService.duration_minutes,
-    servicePrice: defaultService.price,
+    durationMinutes: 60,
+    servicePrice: 0,
 
     location: 'studio' as 'studio' | 'home',
     address: '',
     addressBenchmark: '',
+    locationMapUrl: '',
+    gpsLatitude: null as number | null,
+    gpsLongitude: null as number | null,
     selectedZone: transportZones[0]?.zone || '',
     transportFee: 0,
 
@@ -72,7 +75,14 @@ export default function BookingStepper({
     setErrorNotice(null);
 
     if (step === 1) {
-      if (formData.makeupType.includes('Lainnya') && !formData.customRequest.trim()) {
+      if (!formData.serviceId) {
+        setErrorNotice('Mohon pilih salah satu paket rias terlebih dahulu');
+        return;
+      }
+      if (
+        formData.makeupType.toLowerCase().includes('lainnya') &&
+        !formData.customRequest.trim()
+      ) {
         setErrorNotice('Mohon isi kolom "Makeup apa yang kamu inginkan?"');
         return;
       }
@@ -123,6 +133,9 @@ export default function BookingStepper({
         service_location: formData.location,
         address: formData.location === 'home' ? formData.address : initialSettings.studio_address,
         address_benchmark: formData.addressBenchmark,
+        location_map_url: formData.locationMapUrl || null,
+        gps_latitude: formData.gpsLatitude,
+        gps_longitude: formData.gpsLongitude,
         transport_fee: formData.location === 'home' ? formData.transportFee : 0,
         date: formData.date,
         start_time: formData.startTime,
@@ -241,6 +254,9 @@ export default function BookingStepper({
             transportZones={transportZones}
             selectedZone={formData.selectedZone}
             transportFee={formData.transportFee}
+            locationMapUrl={formData.locationMapUrl}
+            gpsLatitude={formData.gpsLatitude}
+            gpsLongitude={formData.gpsLongitude}
             onLocationChange={(loc) => {
               setFormData((prev) => ({
                 ...prev,
@@ -255,6 +271,14 @@ export default function BookingStepper({
                 ...prev,
                 selectedZone: z.zone,
                 transportFee: z.fee,
+              }))
+            }
+            onGpsChange={(lat, lng, mapUrl) =>
+              setFormData((prev) => ({
+                ...prev,
+                gpsLatitude: lat,
+                gpsLongitude: lng,
+                locationMapUrl: mapUrl,
               }))
             }
           />

@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { revalidatePath } from 'next/cache';
 import { createAdminClient } from '@/lib/supabase/admin';
-import { upsertStoredService, deleteStoredService, getStoredServiceById } from '@/lib/storage';
+import { upsertStoredService, deleteStoredService } from '@/lib/storage';
 
 export const dynamic = 'force-dynamic';
 
@@ -26,17 +26,34 @@ export async function PATCH(
     const updated = upsertStoredService({
       id,
       name: body.name !== undefined ? String(body.name).trim() : undefined,
+      category: body.category !== undefined ? String(body.category).trim() : undefined,
       description: body.description !== undefined ? String(body.description).trim() : undefined,
       price: priceNum,
       duration_minutes: durationNum,
+      image_url: body.image_url !== undefined ? (body.image_url ? String(body.image_url).trim() : null) : undefined,
       is_active: body.is_active !== undefined ? Boolean(body.is_active) : undefined,
     });
 
-    // 2. Best-effort Supabase sync with 1.5s timeout
+    // 2. Best-effort Supabase sync with proper error checking
     try {
       const supabase = createAdminClient();
-      await Promise.race([
-        supabase
+      const { error: updateErr } = await supabase
+        .from('services')
+        .update({
+          name: updated.name,
+          category: updated.category,
+          description: updated.description,
+          price: updated.price,
+          duration_minutes: updated.duration_minutes,
+          image_url: updated.image_url,
+          is_active: updated.is_active,
+          updated_at: new Date().toISOString(),
+        })
+        .eq('id', id);
+
+      if (updateErr) {
+        console.warn('Supabase service update with new columns failed, retrying base:', updateErr.message);
+        await supabase
           .from('services')
           .update({
             name: updated.name,
@@ -46,9 +63,8 @@ export async function PATCH(
             is_active: updated.is_active,
             updated_at: new Date().toISOString(),
           })
-          .eq('id', id),
-        new Promise((_, reject) => setTimeout(() => reject(new Error('timeout')), 1500)),
-      ]);
+          .eq('id', id);
+      }
     } catch (e) {
       console.warn('Supabase service update sync skipped:', e);
     }
@@ -78,7 +94,7 @@ export async function DELETE(
       const supabase = createAdminClient();
       await Promise.race([
         supabase.from('services').delete().eq('id', id),
-        new Promise((_, reject) => setTimeout(() => reject(new Error('timeout')), 1500)),
+        new Promise((_, reject) => setTimeout(() => reject(new Error('timeout')), 6000)),
       ]);
     } catch (e) {
       console.warn('Supabase service delete sync skipped:', e);

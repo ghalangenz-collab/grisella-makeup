@@ -1,0 +1,24 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" width="512" height="512">
+  <defs>
+    <linearGradient id="bg" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#FAEDF0"/>
+      <stop offset="50%" stop-color="#F5DAE0"/>
+      <stop offset="100%" stop-color="#C97A7E"/>
+    </linearGradient>
+    <linearGradient id="gold" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#8C4247"/>
+      <stop offset="100%" stop-color="#542528"/>
+    </linearGradient>
+  </defs>
+  <rect width="512" height="512" rx="128" fill="url(#bg)"/>
+  <circle cx="256" cy="256" r="210" fill="none" stroke="#FFFFFF" stroke-width="4" opacity="0.6"/>
+  <circle cx="256" cy="256" r="196" fill="none" stroke="#C97A7E" stroke-width="2" stroke-dasharray="8 6"/>
+  
+  <path d="M256 80 L266 115 L301 125 L266 135 L256 170 L246 135 L211 125 L246 115 Z" fill="#C97A7E"/>
+  <path d="M370 170 L376 195 L401 201 L376 207 L370 232 L364 207 L339 201 L364 195 Z" fill="#C97A7E" opacity="0.8"/>
+  <path d="M140 330 L146 350 L166 356 L146 362 L140 382 L134 362 L114 356 L134 350 Z" fill="#C97A7E" opacity="0.8"/>
+
+  <text x="256" y="325" font-family="'Playfair Display', serif, Georgia" font-size="210" font-weight="bold" fill="url(#gold)" text-anchor="middle">G</text>
+  <text x="256" y="415" font-family="'Plus Jakarta Sans', sans-serif" font-size="34" font-weight="600" fill="#8C4247" letter-spacing="8" text-anchor="middle">GRISELLA</text>
+  <text x="256" y="445" font-family="'Plus Jakarta Sans', sans-serif" font-size="20" font-weight="500" fill="#C97A7E" letter-spacing="6" text-anchor="middle">MAKEUP ARTIST</text>
+</svg>

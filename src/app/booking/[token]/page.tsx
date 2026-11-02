@@ -4,7 +4,7 @@ import { useEffect, useState, use, useRef } from 'react';
 import Link from 'next/link';
 import Navbar from '@/components/Navbar';
 import { Booking, BookingStatus, BankAccount } from '@/types/database';
-import { formatRupiah, formatWIBDate, formatWIBTime } from '@/lib/utils';
+import { formatRupiah, formatWIBDate, formatWIBTime, normalizeWhatsAppNumber } from '@/lib/utils';
 import {
   Clock,
   MapPin,
@@ -129,6 +129,58 @@ export default function BookingStatusPage({ params }: PageProps) {
     setTimeout(() => setCopiedBankId(null), 2000);
   };
 
+  const compressImage = (file: File): Promise<File> => {
+    return new Promise((resolve) => {
+      if (!file.type.startsWith('image/')) {
+        return resolve(file);
+      }
+      const img = new Image();
+      const objectUrl = URL.createObjectURL(file);
+      img.onload = () => {
+        URL.revokeObjectURL(objectUrl);
+        const maxDim = 1200;
+        let width = img.width;
+        let height = img.height;
+
+        if (width > maxDim || height > maxDim) {
+          if (width > height) {
+            height = Math.round((height * maxDim) / width);
+            width = maxDim;
+          } else {
+            width = Math.round((width * maxDim) / height);
+            height = maxDim;
+          }
+        }
+
+        const canvas = document.createElement('canvas');
+        canvas.width = width;
+        canvas.height = height;
+        const ctx = canvas.getContext('2d');
+        if (ctx) {
+          ctx.drawImage(img, 0, 0, width, height);
+          canvas.toBlob(
+            (blob) => {
+              if (blob) {
+                resolve(new File([blob], file.name.replace(/\.[^.]+$/, '.jpg'), { type: 'image/jpeg' }));
+              } else {
+                resolve(file);
+              }
+            },
+            'image/jpeg',
+            0.82
+          );
+        } else {
+          resolve(file);
+        }
+      };
+      img.onerror = () => {
+        URL.revokeObjectURL(objectUrl);
+        resolve(file);
+      };
+      img.src = objectUrl;
+    });
+  };
+
   const handleSelectReceiptFile = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (file) {
@@ -146,9 +198,12 @@ export default function BookingStatusPage({ params }: PageProps) {
 
     setIsSubmittingProof(true);
     try {
-      // 1. Upload receipt image
+      // 1. Kompres gambar sebelum upload agar hemat bandwidth HP & tidak gagal di serverless
+      const processedFile = await compressImage(receiptFile);
+
+      // 2. Upload receipt image
       const formData = new FormData();
-      formData.append('file', receiptFile);
+      formData.append('file', processedFile);
       formData.append('category', 'receipts');
 
       const uploadRes = await fetch('/api/upload', {
@@ -249,7 +304,7 @@ export default function BookingStatusPage({ params }: PageProps) {
   };
 
   const getWaLink = () => {
-    const muaPhone = settings.mua_whatsapp || '6281234567890';
+    const muaPhone = normalizeWhatsAppNumber(settings.mua_whatsapp);
     const clientName = booking?.client?.name || 'Klien';
     const makeup = booking?.makeup_type || 'Makeup';
     const text = encodeURIComponent(

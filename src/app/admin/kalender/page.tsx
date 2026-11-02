@@ -11,7 +11,7 @@ import {
   User,
   MessageCircle,
 } from 'lucide-react';
-import { formatWIBDate, formatWIBTime } from '@/lib/utils';
+import { formatWIBDate, formatWIBTime, normalizeWhatsAppNumber } from '@/lib/utils';
 import { Booking } from '@/types/database';
 import {
   addDays,
@@ -284,7 +284,7 @@ export default function AdminKalenderPage() {
 
                     {b.client?.phone && (
                       <a
-                        href={`https://wa.me/${b.client.phone.replace(/\D/g, '')}`}
+                        href={`https://wa.me/${normalizeWhatsAppNumber(b.client.phone)}`}
                         target="_blank"
                         rel="noopener noreferrer"
                         className="inline-flex items-center gap-1 text-xs text-[#25D366] font-semibold pt-1 hover:underline"

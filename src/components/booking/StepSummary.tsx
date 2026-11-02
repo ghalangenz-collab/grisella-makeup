@@ -40,7 +40,7 @@ export default function StepSummary({
   isSubmitting,
   onSubmit,
 }: StepSummaryProps) {
-  const isCustom = makeupType === 'Lainnya';
+  const isCustom = makeupType.toLowerCase().includes('lainnya') || servicePrice === 0;
   const totalPrice = isCustom ? 0 : servicePrice + transportFee;
   const dpRate = (dpPercentage || 30) / 100;
   const dpAmount = isCustom ? 0 : Math.round(totalPrice * dpRate);

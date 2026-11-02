@@ -23,7 +23,21 @@ export async function POST(request: NextRequest) {
     const bytes = await file.arrayBuffer();
     const buffer = Buffer.from(bytes);
 
-    // In local environments, try writing to public/uploads
+    // Di lingkungan Vercel serverless, gunakan Data URI agar gambar 100% tampil di semua device tanpa 404
+    const isVercel = process.env.VERCEL === '1' || process.env.NODE_ENV === 'production';
+    if (isVercel) {
+      const mime = file.type || 'image/jpeg';
+      const base64 = buffer.toString('base64');
+      const dataUri = `data:${mime};base64,${base64}`;
+
+      return NextResponse.json({
+        success: true,
+        url: dataUri,
+        filename: file.name,
+      });
+    }
+
+    // In local development, write to public/uploads
     try {
       const uploadDir = path.join(process.cwd(), 'public', 'uploads', category);
       if (!fs.existsSync(uploadDir)) {

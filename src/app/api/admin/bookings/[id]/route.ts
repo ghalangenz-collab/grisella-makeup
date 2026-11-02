@@ -34,13 +34,16 @@ export async function PATCH(
     // 1. Update in local storage
     const updated = updateStoredBooking(id, updatePayload);
 
-    // 2. Best-effort Supabase sync
+    // 2. Best-effort Supabase sync (match by UUID id or public_token safely)
     try {
       const supabase = createAdminClient();
-      await supabase
-        .from('bookings')
-        .update(updatePayload)
-        .eq('id', id);
+      const isUuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(id);
+      if (isUuid) {
+        await supabase.from('bookings').update(updatePayload).eq('id', id);
+      } else {
+        const tokenToMatch = updated?.public_token || id;
+        await supabase.from('bookings').update(updatePayload).eq('public_token', tokenToMatch);
+      }
     } catch (e) {
       console.warn('Supabase booking update sync skipped:', e);
     }
