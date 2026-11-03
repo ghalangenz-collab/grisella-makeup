@@ -11,7 +11,11 @@ const BOOKINGS_FILE = path.join(DATA_DIR, 'bookings.json');
 const CLIENTS_FILE = path.join(DATA_DIR, 'clients.json');
 
 // In-memory cache fallback for serverless environments (e.g. Vercel)
-const memoryCache: Record<string, any> = {};
+declare global {
+  var __grisella_storageCache: Record<string, any> | undefined;
+}
+globalThis.__grisella_storageCache = globalThis.__grisella_storageCache || {};
+const memoryCache: Record<string, any> = globalThis.__grisella_storageCache;
 
 // Ensure data folder exists
 function ensureDataDir() {

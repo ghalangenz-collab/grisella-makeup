@@ -1,7 +1,8 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createAdminClient } from '@/lib/supabase/admin';
-import { getStoredBookingByToken, updateStoredBooking } from '@/lib/storage';
+import { getStoredBookingByToken, updateStoredBooking, upsertStoredBooking } from '@/lib/storage';
 import { getSystemSettings } from '@/lib/services';
+import { enrichBookingGpsAndReceipt } from '@/lib/utils';
 
 export const dynamic = 'force-dynamic';
 
@@ -40,11 +41,15 @@ export async function GET(
             duration_minutes
           )
         `)
-        .eq('public_token', token)
+        .or(`public_token.eq.${token},id.eq.${token}`)
         .maybeSingle();
 
       if (data && !error) {
-        bookingData = { ...bookingData, ...data };
+        bookingData = { ...(bookingData || {}), ...data };
+        // Sync ke local storage agar cepat jika di-refresh lagi
+        if (bookingData) {
+          upsertStoredBooking(bookingData as any);
+        }
       }
     } catch {
       // Supabase offline/error, proceed with local data
@@ -54,10 +59,12 @@ export async function GET(
       return NextResponse.json({ error: 'Booking tidak ditemukan' }, { status: 404 });
     }
 
+    // 3. Pastikan bukti transfer & lokasi GPS ter-ekstrak sempurna
+    const enriched = enrichBookingGpsAndReceipt(bookingData);
     const settings = await getSystemSettings();
 
     return NextResponse.json({
-      booking: bookingData,
+      booking: enriched,
       settings,
     });
   } catch (error) {
@@ -107,42 +114,32 @@ export async function POST(
       const { error: sbUpdateErr } = await supabase
         .from('bookings')
         .update(fullUpdatePayload)
-        .eq('public_token', token);
+        .or(`public_token.eq.${token},id.eq.${token}`);
 
       if (sbUpdateErr) {
         console.warn('Supabase full update failed, retrying with fallback note:', sbUpdateErr.message);
-        // Fallback 1: Coba dengan status 'menunggu_verifikasi' dan note (jangan timpa note lama jika ada)
+        // Fallback: simpan bukti di kolom notes agar tidak pernah hilang
         const baseNote = updated?.notes ? `${updated.notes}\n` : '';
         const noteAppend = `${baseNote}[BUKTI DP: ${payment_receipt_url} | ${payment_bank_name || 'Bank'} a.n ${payment_sender_name || 'Klien'}]`;
-        const { error: err2 } = await supabase
+        
+        await supabase
           .from('bookings')
           .update({
             status: 'menunggu_verifikasi',
             notes: noteAppend,
             updated_at: uploadedAt,
           })
-          .eq('public_token', token);
-
-        // Fallback 2: Jika check constraint database menolak 'menunggu_verifikasi', fallback ke 'menunggu_konfirmasi'
-        if (err2) {
-          console.warn('Supabase status check constraint fallback:', err2.message);
-          await supabase
-            .from('bookings')
-            .update({
-              status: 'menunggu_konfirmasi',
-              notes: noteAppend,
-              updated_at: uploadedAt,
-            })
-            .eq('public_token', token);
-        }
+          .or(`public_token.eq.${token},id.eq.${token}`);
       }
     } catch (e) {
       console.warn('Supabase booking update skipped:', e);
     }
 
+    const finalEnriched = enrichBookingGpsAndReceipt(updated || updates);
+
     return NextResponse.json({
       success: true,
-      booking: updated,
+      booking: finalEnriched,
     });
   } catch (error) {
     console.error('Error submitting payment receipt:', error);

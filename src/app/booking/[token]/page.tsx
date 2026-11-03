@@ -49,6 +49,9 @@ export default function BookingStatusPage({ params }: PageProps) {
 
   // Zoom QRIS modal state
   const [showQrisModal, setShowQrisModal] = useState(false);
+  // Zoom Receipt modal state
+  const [showReceiptModal, setShowReceiptModal] = useState(false);
+  const [isReuploading, setIsReuploading] = useState(false);
 
   // Upload receipt state
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -75,6 +78,16 @@ export default function BookingStatusPage({ params }: PageProps) {
         setLoading(false);
         if (data.booking) {
           setBooking(data.booking);
+          // Simpan token booking di device ini agar fitur "Cek Booking Saya" otomatis menampilkan jadwalnya
+          try {
+            const existing: string[] = JSON.parse(localStorage.getItem('grisella_bookings') || '[]');
+            const t = data.booking.public_token || token;
+            if (!existing.includes(t)) {
+              existing.unshift(t);
+              localStorage.setItem('grisella_bookings', JSON.stringify(existing.slice(0, 10)));
+            }
+            localStorage.setItem('grisella_last_token', t);
+          } catch {}
         }
         if (data.settings) {
           setSettings(data.settings);
@@ -449,9 +462,166 @@ export default function BookingStatusPage({ params }: PageProps) {
         </div>
 
         {/* ============================================================== */}
+        {/* KARTU BUKTI PEMBAYARAN DP (STRUK TRANSFER RESMI) */}
+        {/* ============================================================== */}
+        {booking.payment_receipt_url && (
+          <div className="bg-white border-2 border-emerald-300/80 rounded-3xl p-5 shadow-xs space-y-3.5 animate-in fade-in duration-300">
+            <div className="flex items-center justify-between pb-3 border-b border-emerald-100">
+              <div className="flex items-center gap-2">
+                <div className="w-8 h-8 rounded-full bg-emerald-100 text-emerald-700 flex items-center justify-center">
+                  <FileCheck className="w-4 h-4" />
+                </div>
+                <div>
+                  <h3 className="font-serif font-bold text-sm text-[#2D2424]">
+                    Bukti Pembayaran DP (Struk Transfer)
+                  </h3>
+                  <p className="text-[10px] text-[#635354]">
+                    Struk berhasil diunggah & tersimpan aman
+                  </p>
+                </div>
+              </div>
+              {booking.status === 'dikonfirmasi' ? (
+                <span className="text-[10px] font-bold px-2.5 py-1 rounded-full bg-emerald-100 text-emerald-800 flex items-center gap-1">
+                  <CheckCircle2 className="w-3 h-3 text-emerald-600" />
+                  <span>DP Terverifikasi Sah ✓</span>
+                </span>
+              ) : (
+                <span className="text-[10px] font-bold px-2.5 py-1 rounded-full bg-amber-100 text-amber-900 flex items-center gap-1">
+                  <Clock className="w-3 h-3 text-amber-600 animate-spin" />
+                  <span>Menunggu Verifikasi</span>
+                </span>
+              )}
+            </div>
+
+            {/* Thumbnail Bukti Transfer Interaktif */}
+            <div className="flex flex-col sm:flex-row items-center gap-4 bg-[#FDFBF7] p-3.5 rounded-2xl border border-[#EBDCD5]">
+              <div
+                onClick={() => setShowReceiptModal(true)}
+                className="relative w-36 h-36 sm:w-28 sm:h-28 rounded-2xl overflow-hidden border-2 border-[#C97A7E]/50 shadow-sm cursor-pointer group shrink-0 bg-white"
+                title="Klik untuk melihat bukti transfer ukuran penuh"
+              >
+                {/* eslint-disable-next-line @next/next/no-img-element */}
+                <img
+                  src={booking.payment_receipt_url}
+                  alt="Struk Bukti Transfer DP"
+                  className="w-full h-full object-cover group-hover:scale-105 transition-transform"
+                />
+                <div className="absolute inset-0 bg-black/30 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center text-white text-[10px] font-semibold gap-1">
+                  <Maximize2 className="w-3.5 h-3.5" />
+                  <span>Perbesar</span>
+                </div>
+              </div>
+
+              <div className="flex-1 space-y-1.5 text-xs w-full text-left">
+                <div className="flex justify-between sm:justify-start sm:gap-4">
+                  <span className="text-[#635354]">Bank / Sumber:</span>
+                  <strong className="text-[#2D2424] font-semibold">
+                    {booking.payment_bank_name || 'Transfer Bank / e-Wallet'}
+                  </strong>
+                </div>
+                <div className="flex justify-between sm:justify-start sm:gap-4">
+                  <span className="text-[#635354]">Nama Pengirim:</span>
+                  <strong className="text-[#2D2424] font-semibold">
+                    {booking.payment_sender_name || booking.client?.name || 'Klien'}
+                  </strong>
+                </div>
+                {booking.payment_receipt_uploaded_at && (
+                  <div className="flex justify-between sm:justify-start sm:gap-4">
+                    <span className="text-[#635354]">Waktu Kirim:</span>
+                    <span className="text-[#2D2424]">
+                      {formatWIBDate(booking.payment_receipt_uploaded_at, 'dd MMM yyyy, HH:mm')} WIB
+                    </span>
+                  </div>
+                )}
+
+                <div className="pt-2 flex items-center gap-2">
+                  <button
+                    type="button"
+                    onClick={() => setShowReceiptModal(true)}
+                    className="py-1.5 px-3 rounded-xl bg-white border border-[#EBDCD5] hover:border-[#C97A7E] text-[11px] font-semibold text-[#8C4247] flex items-center gap-1 shadow-2xs transition-colors cursor-pointer"
+                  >
+                    <Maximize2 className="w-3 h-3 text-[#C97A7E]" />
+                    <span>Lihat Foto Struk</span>
+                  </button>
+
+                  {booking.status !== 'dikonfirmasi' && (
+                    <button
+                      type="button"
+                      onClick={() => setIsReuploading(!isReuploading)}
+                      className="py-1.5 px-2.5 rounded-xl text-[11px] text-[#635354] hover:text-[#2D2424] underline transition-colors cursor-pointer"
+                    >
+                      {isReuploading ? 'Tutup Form' : 'Ganti Foto Bukti'}
+                    </button>
+                  )}
+                </div>
+              </div>
+            </div>
+
+            {/* Form Ganti Bukti Transfer */}
+            {isReuploading && (
+              <div className="pt-3 border-t border-[#F1DADF] space-y-3">
+                <span className="text-xs font-bold text-[#8C4247] block">
+                  Unggah Foto Bukti Transfer Baru:
+                </span>
+                <form onSubmit={handleSubmitProof} className="space-y-3 text-xs">
+                  <div>
+                    <input
+                      type="file"
+                      ref={fileInputRef}
+                      accept="image/*"
+                      onChange={handleSelectReceiptFile}
+                      className="hidden"
+                    />
+                    {receiptPreview ? (
+                      <div className="relative p-3 bg-[#FDFBF7] border-2 border-[#C97A7E] rounded-2xl flex items-center gap-3">
+                        <img
+                          src={receiptPreview}
+                          alt="Preview Baru"
+                          className="w-14 h-14 object-cover rounded-xl"
+                        />
+                        <div className="flex-1 min-w-0">
+                          <span className="font-semibold text-xs block truncate">{receiptFile?.name}</span>
+                          <span className="text-[10px] text-emerald-700 font-semibold">Foto siap diunggah ✓</span>
+                        </div>
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setReceiptFile(null);
+                            setReceiptPreview(null);
+                          }}
+                          className="p-1 text-zinc-400 hover:text-rose-600"
+                        >
+                          <X className="w-4 h-4" />
+                        </button>
+                      </div>
+                    ) : (
+                      <button
+                        type="button"
+                        onClick={() => fileInputRef.current?.click()}
+                        className="w-full py-3 px-3 rounded-2xl border-2 border-dashed border-[#C97A7E]/60 bg-[#FAEDF0]/40 flex items-center justify-center gap-1.5 text-xs font-semibold text-[#8C4247] cursor-pointer"
+                      >
+                        <Upload className="w-4 h-4 text-[#C97A7E]" />
+                        <span>Pilih Foto Bukti Transfer Pengganti</span>
+                      </button>
+                    )}
+                  </div>
+                  <button
+                    type="submit"
+                    disabled={!receiptFile || isSubmittingProof}
+                    className="w-full py-2.5 px-4 rounded-xl bg-[#C97A7E] hover:bg-[#B5676B] text-white text-xs font-semibold disabled:opacity-50 cursor-pointer"
+                  >
+                    {isSubmittingProof ? 'Mengunggah...' : 'Perbarui Bukti Transfer'}
+                  </button>
+                </form>
+              </div>
+            )}
+          </div>
+        )}
+
+        {/* ============================================================== */}
         {/* PAYMENT METHODS SECTION (QRIS & BANK ACCOUNTS - NO MIDTRANS) */}
         {/* ============================================================== */}
-        {booking.status === 'menunggu_pembayaran' && (
+        {booking.status === 'menunggu_pembayaran' && !booking.payment_receipt_url && (
           <div className="bg-white border border-[#EBDCD5] rounded-3xl p-5 shadow-xs space-y-4">
             <div className="pb-3 border-b border-[#F1DADF] flex items-center justify-between">
               <div>
@@ -848,10 +1018,60 @@ export default function BookingStatusPage({ params }: PageProps) {
 
             <button
               onClick={() => setShowQrisModal(false)}
-              className="w-full py-2.5 rounded-xl bg-[#C97A7E] text-white text-xs font-semibold"
+              className="w-full py-2.5 rounded-xl bg-[#C97A7E] text-white text-xs font-semibold cursor-pointer"
             >
               Tutup
             </button>
+          </div>
+        </div>
+      )}
+
+      {/* RECEIPT ZOOM MODAL (MODAL LIHAT BUKTI TRANSFER UKURAN PENUH) */}
+      {showReceiptModal && booking?.payment_receipt_url && (
+        <div className="fixed inset-0 z-50 bg-black/80 backdrop-blur-xs flex items-center justify-center p-4">
+          <div className="bg-white rounded-3xl p-5 max-w-sm w-full space-y-3.5 shadow-2xl text-center relative animate-in fade-in zoom-in-95 duration-200">
+            <button
+              onClick={() => setShowReceiptModal(false)}
+              className="absolute top-4 right-4 p-1.5 rounded-full bg-[#FAEDF0] text-[#635354] hover:bg-[#F5DAE0] cursor-pointer"
+            >
+              <X className="w-4 h-4" />
+            </button>
+
+            <div>
+              <span className="font-serif font-bold text-base text-[#2D2424] block">
+                Foto Bukti Transfer DP
+              </span>
+              <span className="text-[11px] text-[#635354]">
+                {booking.payment_bank_name || 'Bank Transfer'} &bull; a.n. {booking.payment_sender_name || booking.client?.name || 'Klien'}
+              </span>
+            </div>
+
+            <div className="max-h-[62vh] overflow-auto rounded-2xl border border-[#EBDCD5] bg-zinc-50 p-1">
+              {/* eslint-disable-next-line @next/next/no-img-element */}
+              <img
+                src={booking.payment_receipt_url}
+                alt="Struk Transfer DP Penuh"
+                className="w-full h-auto object-contain rounded-xl mx-auto shadow-xs"
+              />
+            </div>
+
+            <div className="flex gap-2">
+              <a
+                href={booking.payment_receipt_url}
+                download={`Bukti-DP-${booking.public_token}.jpg`}
+                className="flex-1 py-2.5 rounded-xl border border-[#EBDCD5] hover:border-[#C97A7E] text-xs font-semibold text-[#2D2424] flex items-center justify-center gap-1.5 transition-colors"
+              >
+                <Download className="w-3.5 h-3.5 text-[#C97A7E]" />
+                <span>Unduh Bukti</span>
+              </a>
+              <button
+                type="button"
+                onClick={() => setShowReceiptModal(false)}
+                className="flex-1 py-2.5 rounded-xl bg-[#C97A7E] text-white text-xs font-semibold cursor-pointer"
+              >
+                Tutup
+              </button>
+            </div>
           </div>
         </div>
       )}

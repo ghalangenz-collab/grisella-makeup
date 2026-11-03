@@ -156,3 +156,51 @@ export function generateBookingToken(): string {
   }
   return token;
 }
+
+/**
+ * Memastikan URL bukti transfer dan link GPS terisi secara konsisten
+ * Mendukung pembacaan dari properti kolom maupun fallback di dalam notes
+ */
+export function enrichBookingGpsAndReceipt<T extends Record<string, any>>(b: T): T {
+  if (!b) return b;
+  let payment_receipt_url = b.payment_receipt_url || null;
+  let payment_bank_name = b.payment_bank_name || null;
+  let payment_sender_name = b.payment_sender_name || null;
+
+  if (!payment_receipt_url && b.notes && typeof b.notes === 'string' && b.notes.includes('[BUKTI DP:')) {
+    const match = b.notes.match(/\[BUKTI DP:\s*([^|\]]+)(?:\|\s*([^|\]]+))?(?:\|\s*([^|\]]+))?\]/);
+    if (match) {
+      payment_receipt_url = match[1]?.trim() || null;
+      if (match[2]) payment_bank_name = match[2]?.trim();
+      if (match[3]) payment_sender_name = match[3]?.trim();
+    }
+  }
+
+  let location_map_url = b.location_map_url || null;
+  if (!location_map_url && b.address_benchmark && typeof b.address_benchmark === 'string') {
+    const matchGps = b.address_benchmark.match(/(https?:\/\/[^\s|]+(?:google\.com\/maps|maps\.app\.goo\.gl)[^\s|]*)/);
+    if (matchGps) {
+      location_map_url = matchGps[1];
+    }
+  }
+
+  let status = b.status;
+  if (
+    payment_receipt_url &&
+    !b.paid_dp_at &&
+    status !== 'dikonfirmasi' &&
+    status !== 'selesai' &&
+    status !== 'batal'
+  ) {
+    status = 'menunggu_verifikasi';
+  }
+
+  return {
+    ...b,
+    status,
+    payment_receipt_url,
+    payment_bank_name,
+    payment_sender_name,
+    location_map_url,
+  };
+}

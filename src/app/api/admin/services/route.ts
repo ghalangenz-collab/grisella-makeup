@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { revalidatePath } from 'next/cache';
 import { createAdminClient } from '@/lib/supabase/admin';
 import { getStoredServices, upsertStoredService } from '@/lib/storage';
+import { invalidateGlobalCache } from '@/lib/services';
 
 export const dynamic = 'force-dynamic';
 
@@ -52,6 +53,7 @@ export async function POST(request: NextRequest) {
       image_url: body.image_url ? String(body.image_url).trim() : null,
       is_active: body.is_active ?? true,
     });
+    invalidateGlobalCache();
 
     // 2. Best-effort Supabase sync with proper error checking
     try {
