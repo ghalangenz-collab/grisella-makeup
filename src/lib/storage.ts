@@ -460,3 +460,41 @@ export function updateStoredBooking(
   saveStoredBookings(bookings);
   return bookings[idx];
 }
+
+// ====================================================================
+// USER ACCOUNTS STORAGE (FALLBACK AUTH)
+// ====================================================================
+
+export interface StoredUserAccount {
+  id: string;
+  email: string;
+  fullName: string;
+  phone: string;
+  passwordHash: string;
+  createdAt: string;
+}
+
+const USERS_FILE = path.join(DATA_DIR, 'users.json');
+
+export function getStoredUserAccounts(): StoredUserAccount[] {
+  return readJsonFile<StoredUserAccount[]>(USERS_FILE, []);
+}
+
+export function saveStoredUserAccount(account: StoredUserAccount): void {
+  const accounts = getStoredUserAccounts();
+  const existingIdx = accounts.findIndex(
+    (a) => a.email.toLowerCase() === account.email.toLowerCase()
+  );
+  if (existingIdx >= 0) {
+    accounts[existingIdx] = account;
+  } else {
+    accounts.push(account);
+  }
+  writeJsonFile(USERS_FILE, accounts);
+}
+
+export function findStoredUserAccount(email: string): StoredUserAccount | undefined {
+  const accounts = getStoredUserAccounts();
+  const clean = email.toLowerCase().trim();
+  return accounts.find((a) => a.email.toLowerCase().trim() === clean);
+}

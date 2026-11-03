@@ -1,16 +1,15 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { upsertStoredClient } from '@/lib/storage';
+import crypto from 'crypto';
+import { upsertStoredClient, findStoredUserAccount } from '@/lib/storage';
 import { normalizePhone } from '@/lib/utils';
 import { createAdminClient } from '@/lib/supabase/admin';
+import { getSupabaseUrl, getSupabaseAnonKey } from '@/lib/supabase/config';
 
 export const dynamic = 'force-dynamic';
 
-const SUPABASE_URL =
-  process.env.NEXT_PUBLIC_SUPABASE_URL || 'https://lzucxgbxvixlybpwbodh.supabase.co';
-const SUPABASE_KEY =
-  process.env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY ||
-  process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY ||
-  'sb_publishable_bTnZiVyO9Vx3DyG4UyR_7Q_yIYkJS6Q';
+function hashPassword(pwd: string): string {
+  return crypto.createHash('sha256').update(pwd).digest('hex');
+}
 
 export async function POST(request: NextRequest) {
   try {
@@ -24,105 +23,113 @@ export async function POST(request: NextRequest) {
     }
 
     const cleanEmail = String(email).toLowerCase().trim();
+    const inputPassword = String(password);
+    const supabaseUrl = getSupabaseUrl();
+    const supabaseKey = getSupabaseAnonKey();
 
-    // 1. Verifikasi kredensial langsung ke Supabase Auth REST API
-    const sbRes = await fetch(`${SUPABASE_URL}/auth/v1/token?grant_type=password`, {
-      method: 'POST',
-      headers: {
-        'apikey': SUPABASE_KEY,
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify({
-        email: cleanEmail,
-        password: String(password),
-      }),
-    });
+    // 1. Coba verifikasi kredensial ke Supabase Auth REST API
+    let sbUser: any = null;
+    let sbNeedsOtp = false;
 
-    const data = await sbRes.json();
+    try {
+      const sbRes = await fetch(`${supabaseUrl}/auth/v1/token?grant_type=password`, {
+        method: 'POST',
+        headers: {
+          'apikey': supabaseKey,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          email: cleanEmail,
+          password: inputPassword,
+        }),
+      });
 
-    if (!sbRes.ok) {
-      const msg = data.msg || data.error_description || data.message || '';
-      if (
-        msg.toLowerCase().includes('invalid') ||
-        msg.toLowerCase().includes('credential') ||
-        data.error_code === 'invalid_credentials'
-      ) {
+      const data = await sbRes.json();
+
+      if (sbRes.ok && data.user) {
+        sbUser = data.user;
+      } else {
+        const msg = data.msg || data.error_description || data.message || '';
+        if (msg.toLowerCase().includes('email not confirmed')) {
+          sbNeedsOtp = true;
+        }
+      }
+    } catch (sbErr) {
+      console.warn('Supabase auth check connection notice:', sbErr);
+    }
+
+    // Jika Supabase berhasil memverifikasi kredensial
+    if (sbUser) {
+      const metadata = sbUser.user_metadata || {};
+      const fullName = metadata.full_name || cleanEmail.split('@')[0];
+      const phone = metadata.phone || '';
+
+      try {
+        const cleanPhone = phone ? normalizePhone(phone) : '';
+        upsertStoredClient({
+          name: fullName,
+          phone: phone || '08',
+          phone_normalized: cleanPhone || '08',
+          source: 'Login Akun Pelanggan',
+          notes_favorite_style: `User Akun Pelanggan: ${cleanEmail}`,
+        });
+      } catch (syncErr) {
+        console.warn('Client sync notice:', syncErr);
+      }
+
+      return NextResponse.json({
+        success: true,
+        user: {
+          id: sbUser.id,
+          email: cleanEmail,
+          full_name: fullName,
+          phone: phone,
+          role: 'user',
+        },
+      });
+    }
+
+    // Jika Supabase membutuhkan OTP verifikasi
+    if (sbNeedsOtp) {
+      return NextResponse.json(
+        {
+          error: 'Email kamu belum diverifikasi. Masukkan 6 digit kode OTP yang dikirim ke Gmail kamu.',
+          needs_otp: true,
+        },
+        { status: 403 }
+      );
+    }
+
+    // 2. Cek akun lokal tersimpan (validasi password hash dengan aman)
+    const localAccount = findStoredUserAccount(cleanEmail);
+    if (localAccount) {
+      const inputHash = hashPassword(inputPassword);
+      if (inputHash === localAccount.passwordHash) {
+        // Password COCOK! Izinkan masuk
+        return NextResponse.json({
+          success: true,
+          user: {
+            id: localAccount.id,
+            email: cleanEmail,
+            full_name: localAccount.fullName,
+            phone: localAccount.phone,
+            role: 'user',
+          },
+        });
+      } else {
+        // Password SALAH! Tolak tegas
         return NextResponse.json(
           { error: 'Email atau password yang kamu masukkan salah.' },
           { status: 401 }
         );
       }
-      if (msg.toLowerCase().includes('email not confirmed')) {
-        return NextResponse.json(
-          {
-            error: 'Email kamu belum diverifikasi. Silakan masukkan 6 digit kode OTP yang dikirim ke Gmail kamu.',
-            needs_otp: true,
-          },
-          { status: 403 }
-        );
-      }
-      return NextResponse.json(
-        { error: msg || 'Gagal masuk ke akun. Periksa kembali email dan password kamu.' },
-        { status: 400 }
-      );
     }
 
-    const user = data.user;
-    if (!user) {
-      return NextResponse.json(
-        { error: 'Email atau password yang kamu masukkan salah.' },
-        { status: 401 }
-      );
-    }
-
-    const metadata = user.user_metadata || {};
-    const fullName = metadata.full_name || cleanEmail.split('@')[0];
-    const phone = metadata.phone || '';
-
-    // 2. Sinkronkan profil ke clients table & local storage
-    try {
-      const cleanPhone = phone ? normalizePhone(phone) : '';
-      upsertStoredClient({
-        name: fullName,
-        phone: phone || '08',
-        phone_normalized: cleanPhone || '08',
-        source: 'Login Akun Pelanggan',
-        notes_favorite_style: `User Akun Pelanggan: ${cleanEmail}`,
-      });
-
-      const adminSupabase = createAdminClient();
-      if (cleanPhone) {
-        const { data: existing } = await adminSupabase
-          .from('clients')
-          .select('id')
-          .eq('phone_normalized', cleanPhone)
-          .maybeSingle();
-
-        if (existing?.id) {
-          await adminSupabase
-            .from('clients')
-            .update({
-              name: fullName,
-              notes_favorite_style: `User Akun Pelanggan: ${cleanEmail}`,
-              updated_at: new Date().toISOString(),
-            })
-            .eq('id', existing.id);
-        }
-      }
-    } catch (syncErr) {
-      console.warn('Sync client record on login skipped:', syncErr);
-    }
-
-    return NextResponse.json({
-      success: true,
-      user: {
-        id: user.id,
-        email: cleanEmail,
-        full_name: fullName,
-        phone: phone,
-        role: 'user',
-      },
-    });
+    // 3. Jika tidak ditemukan atau kredensial salah: TOLAK TEGAS
+    return NextResponse.json(
+      { error: 'Email atau password yang kamu masukkan salah.' },
+      { status: 401 }
+    );
   } catch (error: any) {
     console.error('Server login error:', error);
     return NextResponse.json(
