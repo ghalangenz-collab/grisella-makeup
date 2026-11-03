@@ -112,7 +112,7 @@ function AuthContent() {
     setTimeout(() => router.push(redirectTo), 900);
   };
 
-  // 1. SUBMIT LOGIN DENGAN PASSWORD
+  // 1. SUBMIT LOGIN DENGAN PASSWORD (STRICT SERVER API)
   const handleLoginWithPassword = async (e: React.FormEvent) => {
     e.preventDefault();
     setErrorMsg(null);
@@ -122,54 +122,40 @@ function AuthContent() {
     const cleanEmail = email.toLowerCase().trim();
 
     try {
-      const supabase = createClient();
-      const { data, error } = await supabase.auth.signInWithPassword({
-        email: cleanEmail,
-        password,
+      const res = await fetch('/api/auth/login', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ email: cleanEmail, password }),
       });
 
-      if (!error && data?.user) {
-        const metadata = data.user.user_metadata || {};
-        await syncAndFinalizeLogin({
-          id: data.user.id,
-          email: data.user.email || cleanEmail,
-          full_name: metadata.full_name,
-          phone: metadata.phone,
-        });
-        return;
-      }
+      const data = await res.json();
 
-      if (error) {
-        // Jika error email belum dikonfirmasi, tawarkan verifikasi OTP
-        if (error.message.toLowerCase().includes('email not confirmed')) {
+      if (!res.ok) {
+        if (data.needs_otp) {
           setOtpType('signup');
           setMode('otp');
           setResendCooldown(45);
-          setErrorMsg('Email kamu belum diverifikasi. Masukkan 6 digit kode OTP yang dikirim ke Gmail kamu.');
-          setLoading(false);
+          setErrorMsg(data.error);
           return;
         }
+        setErrorMsg(data.error || 'Email atau password yang kamu masukkan salah.');
+        return;
+      }
 
-        // Keamanan Ketat: Tolak tegas jika kredensial salah
-        if (
-          error.message === 'Invalid login credentials' ||
-          error.message.toLowerCase().includes('invalid') ||
-          error.message.toLowerCase().includes('credentials')
-        ) {
-          setErrorMsg('Email atau password yang kamu masukkan salah.');
-        } else {
-          setErrorMsg(error.message);
-        }
+      if (data.user) {
+        setUserSession(data.user);
+        setSuccessMsg('Berhasil masuk! Mengalihkan ke dashboard akun...');
+        setTimeout(() => router.push(redirectTo), 700);
       }
     } catch (err: any) {
-      console.error('Supabase auth network issue:', err);
-      setErrorMsg('Gagal terhubung ke layanan autentikasi. Silakan periksa koneksi internet.');
+      console.error('Login error:', err);
+      setErrorMsg('Gagal terhubung ke server. Periksa koneksi internet Anda.');
     } finally {
       setLoading(false);
     }
   };
 
-  // 2. SUBMIT DAFTAR AKUN BARU
+  // 2. SUBMIT DAFTAR AKUN BARU (STRICT SERVER API)
   const handleRegister = async (e: React.FormEvent) => {
     e.preventDefault();
     setErrorMsg(null);
@@ -198,37 +184,28 @@ function AuthContent() {
     }
 
     try {
-      const supabase = createClient();
-      const { data, error } = await supabase.auth.signUp({
-        email: cleanEmail,
-        password,
-        options: {
-          data: {
-            full_name: fullName.trim(),
-            phone: cleanPhone,
-            role: 'user',
-          },
-        },
+      const res = await fetch('/api/auth/register', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          fullName: fullName.trim(),
+          phone: cleanPhone,
+          email: cleanEmail,
+          password,
+        }),
       });
 
-      if (error) {
-        if (error.message.toLowerCase().includes('already registered')) {
-          setErrorMsg('Email ini sudah terdaftar. Silakan pilih tab "Masuk (Login)".');
-        } else {
-          setErrorMsg(error.message);
-        }
-        setLoading(false);
+      const data = await res.json();
+
+      if (!res.ok) {
+        setErrorMsg(data.error || 'Gagal mendaftarkan akun.');
         return;
       }
 
-      // Jika user langsung terkonfirmasi (auto-confirm enabled di Supabase)
-      if (data?.session && data.user) {
-        await syncAndFinalizeLogin({
-          id: data.user.id,
-          email: cleanEmail,
-          full_name: fullName.trim(),
-          phone: cleanPhone,
-        });
+      if (data.isAutoConfirmed && data.user) {
+        setUserSession(data.user);
+        setSuccessMsg('Pendaftaran berhasil! Mengalihkan...');
+        setTimeout(() => router.push(redirectTo), 700);
         return;
       }
 
@@ -238,14 +215,14 @@ function AuthContent() {
       setResendCooldown(45);
       setSuccessMsg(`Pendaftaran berhasil! Kode verifikasi 6 digit telah dikirim ke ${cleanEmail}`);
     } catch (err: any) {
-      console.error('Register exception:', err);
-      setErrorMsg('Gagal memproses pendaftaran. Silakan periksa koneksi internet.');
+      console.error('Register error:', err);
+      setErrorMsg('Gagal memproses pendaftaran. Periksa koneksi internet Anda.');
     } finally {
       setLoading(false);
     }
   };
 
-  // 3. MINTA LOGIN DENGAN OTP GMAIL
+  // 3. MINTA LOGIN DENGAN OTP GMAIL (STRICT SERVER API)
   const handleRequestOtpLogin = async () => {
     const cleanEmail = email.toLowerCase().trim();
     if (!cleanEmail) {
@@ -257,30 +234,31 @@ function AuthContent() {
     setLoading(true);
 
     try {
-      const supabase = createClient();
-      const { error } = await supabase.auth.signInWithOtp({
-        email: cleanEmail,
+      const res = await fetch('/api/auth/otp/request', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ email: cleanEmail }),
       });
 
-      if (error) {
-        setErrorMsg(error.message);
+      const data = await res.json();
+
+      if (!res.ok) {
+        setErrorMsg(data.error || 'Gagal mengirim kode OTP.');
       } else {
         setOtpType('email');
         setMode('otp');
         setResendCooldown(45);
-        setSuccessMsg(`Kode OTP 6 digit telah dikirim ke ${cleanEmail}`);
+        setSuccessMsg(data.message || `Kode OTP 6 digit telah dikirim ke ${cleanEmail}`);
       }
     } catch (err: any) {
-      console.warn('OTP Request error:', err);
-      setOtpType('email');
-      setMode('otp');
-      setResendCooldown(45);
+      console.error('OTP Request error:', err);
+      setErrorMsg('Gagal mengirim kode OTP. Periksa jaringan Anda.');
     } finally {
       setLoading(false);
     }
   };
 
-  // 4. VERIFIKASI KODE OTP (6 DIGIT)
+  // 4. VERIFIKASI KODE OTP (STRICT SERVER API)
   const handleVerifyOtp = async (e?: React.FormEvent) => {
     if (e) e.preventDefault();
     const token = otpDigits.join('').trim();
@@ -294,49 +272,31 @@ function AuthContent() {
     const cleanEmail = email.toLowerCase().trim();
 
     try {
-      const supabase = createClient();
-      const { data, error } = await supabase.auth.verifyOtp({
-        email: cleanEmail,
-        token,
-        type: otpType,
+      const res = await fetch('/api/auth/otp/verify', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          email: cleanEmail,
+          token,
+          type: otpType,
+        }),
       });
 
-      if (!error && data?.user) {
-        const metadata = data.user.user_metadata || {};
-        await syncAndFinalizeLogin({
-          id: data.user.id,
-          email: data.user.email || cleanEmail,
-          full_name: metadata.full_name || fullName,
-          phone: metadata.phone || phone,
-        });
+      const data = await res.json();
+
+      if (!res.ok) {
+        setErrorMsg(data.error || 'Kode OTP tidak valid atau sudah kedaluwarsa.');
         return;
       }
 
-      if (error) {
-        // Coba type alternatif ('email' vs 'signup')
-        const altType = otpType === 'signup' ? 'email' : 'signup';
-        const { data: altData, error: altErr } = await supabase.auth.verifyOtp({
-          email: cleanEmail,
-          token,
-          type: altType,
-        });
-
-        if (!altErr && altData?.user) {
-          const metadata = altData.user.user_metadata || {};
-          await syncAndFinalizeLogin({
-            id: altData.user.id,
-            email: altData.user.email || cleanEmail,
-            full_name: metadata.full_name || fullName,
-            phone: metadata.phone || phone,
-          });
-          return;
-        }
-
-        setErrorMsg('Kode OTP tidak valid atau sudah kedaluwarsa. Silakan periksa kembali email kamu.');
+      if (data.user) {
+        setUserSession(data.user);
+        setSuccessMsg('Verifikasi berhasil! Mengalihkan ke dashboard akun...');
+        setTimeout(() => router.push(redirectTo), 700);
       }
     } catch (err: any) {
-      console.error('Verify OTP exception:', err);
-      setErrorMsg('Gagal memverifikasi OTP. Silakan periksa kembali kode Anda.');
+      console.error('Verify OTP error:', err);
+      setErrorMsg('Gagal memverifikasi OTP. Periksa jaringan Anda.');
     } finally {
       setLoading(false);
     }
