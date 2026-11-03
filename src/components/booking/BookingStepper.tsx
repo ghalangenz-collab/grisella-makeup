@@ -1,8 +1,9 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import { Service } from '@/types/database';
+import { getUserSession } from '@/lib/auth-user';
 import StepService from './StepService';
 import StepLocation from './StepLocation';
 import StepSchedule from './StepSchedule';
@@ -69,6 +70,18 @@ export default function BookingStepper({
 
   const [errorNotice, setErrorNotice] = useState<string | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
+
+  // Auto-fill nama & WA jika user sudah login
+  useEffect(() => {
+    const user = getUserSession();
+    if (user) {
+      setFormData((prev) => ({
+        ...prev,
+        clientName: prev.clientName || user.full_name || '',
+        clientPhone: prev.clientPhone || user.phone || '',
+      }));
+    }
+  }, []);
 
   // Validasi sebelum pindah step
   const handleNext = () => {
