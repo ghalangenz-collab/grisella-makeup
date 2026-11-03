@@ -4,6 +4,7 @@ import { upsertStoredClient, findStoredUserAccount } from '@/lib/storage';
 import { normalizePhone } from '@/lib/utils';
 import { createAdminClient } from '@/lib/supabase/admin';
 import { getSupabaseUrl, getSupabaseAnonKey } from '@/lib/supabase/config';
+import { findCloudUserAccount } from '@/lib/cloud-users';
 
 export const dynamic = 'force-dynamic';
 
@@ -100,19 +101,21 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    // 2. Cek akun lokal tersimpan (validasi password hash dengan aman)
-    const localAccount = findStoredUserAccount(cleanEmail);
-    if (localAccount) {
+    // 2. Cek akun Cloud Database Supabase (berlaku untuk SEMUA device: HP, Laptop, dll)
+    const cloudAccount = await findCloudUserAccount(cleanEmail);
+    const targetAccount = cloudAccount || findStoredUserAccount(cleanEmail);
+
+    if (targetAccount) {
       const inputHash = hashPassword(inputPassword);
-      if (inputHash === localAccount.passwordHash) {
-        // Password COCOK! Izinkan masuk
+      if (inputHash === targetAccount.passwordHash) {
+        // Password COCOK! Izinkan masuk di device manapun
         return NextResponse.json({
           success: true,
           user: {
-            id: localAccount.id,
+            id: targetAccount.id,
             email: cleanEmail,
-            full_name: localAccount.fullName,
-            phone: localAccount.phone,
+            full_name: targetAccount.fullName,
+            phone: targetAccount.phone,
             role: 'user',
           },
         });

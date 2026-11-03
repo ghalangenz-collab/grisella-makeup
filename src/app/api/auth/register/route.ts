@@ -4,6 +4,7 @@ import { upsertStoredClient, saveStoredUserAccount } from '@/lib/storage';
 import { normalizePhone } from '@/lib/utils';
 import { createAdminClient } from '@/lib/supabase/admin';
 import { getSupabaseUrl, getSupabaseAnonKey } from '@/lib/supabase/config';
+import { saveCloudUserAccount } from '@/lib/cloud-users';
 
 export const dynamic = 'force-dynamic';
 
@@ -36,9 +37,19 @@ export async function POST(request: NextRequest) {
     const supabaseUrl = getSupabaseUrl();
     const supabaseKey = getSupabaseAnonKey();
 
-    // 1. Simpan selalu ke stored user account dengan hash password
+    // 1. Simpan ke Cloud Database Supabase & local storage
     const localUserId = `usr-${Date.now()}`;
     const passwordHash = hashPassword(String(password));
+
+    await saveCloudUserAccount({
+      id: localUserId,
+      email: cleanEmail,
+      fullName: name,
+      phone: String(phone),
+      passwordHash,
+      createdAt: new Date().toISOString(),
+    });
+
     saveStoredUserAccount({
       id: localUserId,
       email: cleanEmail,
