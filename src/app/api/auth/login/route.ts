@@ -90,17 +90,6 @@ export async function POST(request: NextRequest) {
       });
     }
 
-    // Jika Supabase membutuhkan OTP verifikasi
-    if (sbNeedsOtp) {
-      return NextResponse.json(
-        {
-          error: 'Email kamu belum diverifikasi. Masukkan 6 digit kode OTP yang dikirim ke Gmail kamu.',
-          needs_otp: true,
-        },
-        { status: 403 }
-      );
-    }
-
     // 2. Cek akun Cloud Database Supabase (berlaku untuk SEMUA device: HP, Laptop, dll)
     const cloudAccount = await findCloudUserAccount(cleanEmail);
     const targetAccount = cloudAccount || findStoredUserAccount(cleanEmail);
@@ -126,6 +115,17 @@ export async function POST(request: NextRequest) {
           { status: 401 }
         );
       }
+    }
+
+    // 3. Jika Supabase membutuhkan OTP verifikasi
+    if (sbNeedsOtp) {
+      return NextResponse.json(
+        {
+          error: 'Email kamu belum diverifikasi. Masukkan 6 digit kode OTP yang dikirim ke Gmail kamu.',
+          needs_otp: true,
+        },
+        { status: 403 }
+      );
     }
 
     // 3. Jika tidak ditemukan atau kredensial salah: TOLAK TEGAS
