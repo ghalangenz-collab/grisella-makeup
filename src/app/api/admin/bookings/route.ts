@@ -112,7 +112,16 @@ export async function GET() {
       (a, b) => new Date(b.start_at || b.created_at).getTime() - new Date(a.start_at || a.created_at).getTime()
     );
 
-    return NextResponse.json({ bookings: uniqueBookings });
+    return NextResponse.json(
+      { bookings: uniqueBookings },
+      {
+        headers: {
+          'Cache-Control': 'no-store, no-cache, must-revalidate, proxy-revalidate',
+          'Pragma': 'no-cache',
+          'Expires': '0',
+        },
+      }
+    );
   } catch (error) {
     console.error('Error fetching admin bookings:', error);
     return NextResponse.json({ bookings: [] });

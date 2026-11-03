@@ -23,7 +23,8 @@ export async function GET(
     // 2. Coba ambil dan perbarui dengan data Supabase (agar sinkron di semua device)
     try {
       const supabase = createAdminClient();
-      const { data, error } = await supabase
+      const isUuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(token);
+      const query = supabase
         .from('bookings')
         .select(`
           *,
@@ -40,9 +41,11 @@ export async function GET(
             price,
             duration_minutes
           )
-        `)
-        .or(`public_token.eq.${token},id.eq.${token}`)
-        .maybeSingle();
+        `);
+
+      const { data, error } = isUuid
+        ? await query.eq('id', token).maybeSingle()
+        : await query.eq('public_token', token).maybeSingle();
 
       if (data && !error) {
         bookingData = { ...(bookingData || {}), ...data };
@@ -63,10 +66,19 @@ export async function GET(
     const enriched = enrichBookingGpsAndReceipt(bookingData);
     const settings = await getSystemSettings();
 
-    return NextResponse.json({
-      booking: enriched,
-      settings,
-    });
+    return NextResponse.json(
+      {
+        booking: enriched,
+        settings,
+      },
+      {
+        headers: {
+          'Cache-Control': 'no-store, no-cache, must-revalidate, proxy-revalidate',
+          'Pragma': 'no-cache',
+          'Expires': '0',
+        },
+      }
+    );
   } catch (error) {
     console.error('Error in booking token API:', error);
     return NextResponse.json({ error: 'Gagal memuat data booking' }, { status: 500 });
@@ -111,10 +123,11 @@ export async function POST(
         updated_at: uploadedAt,
       };
 
-      const { error: sbUpdateErr } = await supabase
-        .from('bookings')
-        .update(fullUpdatePayload)
-        .or(`public_token.eq.${token},id.eq.${token}`);
+      const isUuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(token);
+      const updateQuery = supabase.from('bookings').update(fullUpdatePayload);
+      const { error: sbUpdateErr } = isUuid
+        ? await updateQuery.eq('id', token)
+        : await updateQuery.eq('public_token', token);
 
       if (sbUpdateErr) {
         console.warn('Supabase full update failed, retrying with fallback note:', sbUpdateErr.message);
@@ -122,14 +135,19 @@ export async function POST(
         const baseNote = updated?.notes ? `${updated.notes}\n` : '';
         const noteAppend = `${baseNote}[BUKTI DP: ${payment_receipt_url} | ${payment_bank_name || 'Bank'} a.n ${payment_sender_name || 'Klien'}]`;
         
-        await supabase
+        const fallbackQuery = supabase
           .from('bookings')
           .update({
             status: 'menunggu_verifikasi',
             notes: noteAppend,
             updated_at: uploadedAt,
-          })
-          .or(`public_token.eq.${token},id.eq.${token}`);
+          });
+
+        if (isUuid) {
+          await fallbackQuery.eq('id', token);
+        } else {
+          await fallbackQuery.eq('public_token', token);
+        }
       }
     } catch (e) {
       console.warn('Supabase booking update skipped:', e);
@@ -137,10 +155,19 @@ export async function POST(
 
     const finalEnriched = enrichBookingGpsAndReceipt(updated || updates);
 
-    return NextResponse.json({
-      success: true,
-      booking: finalEnriched,
-    });
+    return NextResponse.json(
+      {
+        success: true,
+        booking: finalEnriched,
+      },
+      {
+        headers: {
+          'Cache-Control': 'no-store, no-cache, must-revalidate, proxy-revalidate',
+          'Pragma': 'no-cache',
+          'Expires': '0',
+        },
+      }
+    );
   } catch (error) {
     console.error('Error submitting payment receipt:', error);
     return NextResponse.json({ error: 'Gagal menyimpan bukti pembayaran' }, { status: 500 });

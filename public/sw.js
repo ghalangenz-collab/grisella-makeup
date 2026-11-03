@@ -1,7 +1,7 @@
 // ====================================================================
 // GRISELLA MAKEUP - PWA SERVICE WORKER (AUTO-UPDATE & INSTANT RELOAD)
 // ====================================================================
-const CACHE_NAME = 'grisella-makeup-v5';
+const CACHE_NAME = 'grisella-makeup-v6';
 
 self.addEventListener('install', () => {
   // Langsung lewati masa tunggu agar versi baru dari Vercel langsung aktif

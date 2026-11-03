@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
+import crypto from 'crypto';
 import { createAdminClient } from '@/lib/supabase/admin';
 import { generateBookingToken, normalizePhone } from '@/lib/utils';
 import { getStoredServices, getStoredSettings, upsertStoredClient, upsertStoredBooking } from '@/lib/storage';
@@ -175,19 +176,29 @@ export async function POST(request: NextRequest) {
             .update({ name: client_name.trim(), updated_at: new Date().toISOString() })
             .eq('id', sbClientId);
         } else {
+          const generatedClientId = crypto.randomUUID();
           const { data: newClient, error: clientInsertErr } = await supabase
             .from('clients')
             .insert({
+              id: generatedClientId,
               name: client_name.trim(),
               phone: client_phone.trim(),
               phone_normalized: phoneNormalized,
               source: source || 'Lainnya',
             })
             .select('id')
-            .single();
+            .maybeSingle();
 
-          if (!clientInsertErr && newClient?.id) {
+          if (newClient?.id) {
             sbClientId = newClient.id;
+          } else {
+            console.warn('Supabase client insert failed, trying lookup:', clientInsertErr?.message);
+            const { data: fallbackClient } = await supabase
+              .from('clients')
+              .select('id')
+              .eq('phone_normalized', phoneNormalized)
+              .maybeSingle();
+            sbClientId = fallbackClient?.id || generatedClientId;
           }
         }
       } catch (clientErr) {
@@ -277,23 +288,32 @@ export async function POST(request: NextRequest) {
       console.warn('Supabase booking sync skipped:', e);
     }
 
-    return NextResponse.json({
-      success: true,
-      token: publicToken,
-      redirect_url: `/booking/${publicToken}`,
-      booking: {
-        public_token: publicToken,
-        makeup_type,
-        status,
-        date,
-        start_time,
-        service_location,
-        total_price: totalPrice,
-        dp_amount: dpAmount,
-        expires_at: expiresAt,
-        location_map_url,
+    return NextResponse.json(
+      {
+        success: true,
+        token: publicToken,
+        redirect_url: `/booking/${publicToken}`,
+        booking: {
+          public_token: publicToken,
+          makeup_type,
+          status,
+          date,
+          start_time,
+          service_location,
+          total_price: totalPrice,
+          dp_amount: dpAmount,
+          expires_at: expiresAt,
+          location_map_url,
+        },
       },
-    });
+      {
+        headers: {
+          'Cache-Control': 'no-store, no-cache, must-revalidate, proxy-revalidate',
+          'Pragma': 'no-cache',
+          'Expires': '0',
+        },
+      }
+    );
   } catch (error) {
     console.error('Booking creation fatal error:', error);
     return NextResponse.json({ error: 'Terjadi kesalahan saat membuat booking' }, { status: 500 });

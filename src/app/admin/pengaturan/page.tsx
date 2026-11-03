@@ -50,7 +50,7 @@ export default function AdminPengaturanPage() {
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
-    fetch('/api/admin/settings')
+    fetch('/api/admin/settings', { cache: 'no-store' })
       .then((res) => res.json())
       .then((data) => {
         if (data.settings) {
@@ -185,6 +185,7 @@ export default function AdminPengaturanPage() {
       const res = await fetch('/api/admin/settings', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
+        cache: 'no-store',
         body: JSON.stringify({ settings: payloadSettings }),
       });
 

@@ -65,8 +65,11 @@ export async function GET(request: NextRequest) {
         .order('created_at', { ascending: false })
         .limit(10);
 
-      if (query.startsWith('grs_') || query.length === 36) {
-        sbQuery = sbQuery.or(`public_token.eq.${query},id.eq.${query}`);
+      const isUuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(query);
+      if (isUuid) {
+        sbQuery = sbQuery.eq('id', query);
+      } else if (query.startsWith('grs_')) {
+        sbQuery = sbQuery.eq('public_token', query);
       }
 
       const { data, error } = await sbQuery;
@@ -98,7 +101,16 @@ export async function GET(request: NextRequest) {
       (a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime()
     );
 
-    return NextResponse.json({ bookings });
+    return NextResponse.json(
+      { bookings },
+      {
+        headers: {
+          'Cache-Control': 'no-store, no-cache, must-revalidate, proxy-revalidate',
+          'Pragma': 'no-cache',
+          'Expires': '0',
+        },
+      }
+    );
   } catch (error) {
     console.error('Error in search bookings:', error);
     return NextResponse.json({ bookings: [] });

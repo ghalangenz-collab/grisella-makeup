@@ -68,7 +68,7 @@ export default function AdminBookingsPage() {
   };
 
   const fetchBookings = (isInitial = false) => {
-    fetch('/api/admin/bookings')
+    fetch('/api/admin/bookings', { cache: 'no-store' })
       .then((res) => res.json())
       .then((data) => {
         if (data.bookings && Array.isArray(data.bookings)) {
@@ -121,7 +121,7 @@ export default function AdminBookingsPage() {
   useEffect(() => {
     fetchBookings(true);
 
-    fetch('/api/admin/settings')
+    fetch('/api/admin/settings', { cache: 'no-store' })
       .then((res) => res.json())
       .then((data) => {
         if (data.settings?.dp_percentage) {
@@ -174,10 +174,10 @@ export default function AdminBookingsPage() {
       console.warn('Realtime channel setup skipped:', realtimeErr);
     }
 
-    // 2. BACKGROUND POLLING FALLBACK (Setiap 7 detik untuk menjamin sinkronisasi 100% tanpa delay)
+    // 2. BACKGROUND POLLING FALLBACK (Setiap 4 detik untuk sinkronisasi instan antar-perangkat)
     const pollInterval = setInterval(() => {
       fetchBookings();
-    }, 7000);
+    }, 4000);
 
     return () => {
       clearInterval(pollInterval);

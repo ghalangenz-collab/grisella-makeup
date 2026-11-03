@@ -15,14 +15,34 @@ export async function GET() {
       if (!error && data && data.length > 0) {
         const remoteMap: Record<string, string> = { ...localSettings };
         data.forEach((row: any) => {
-          remoteMap[row.key] = row.value;
+          if (row.key && row.value !== undefined && row.value !== null) {
+            remoteMap[row.key] = row.value;
+          }
         });
-        return NextResponse.json({ settings: remoteMap });
+        return NextResponse.json(
+          { settings: remoteMap },
+          {
+            headers: {
+              'Cache-Control': 'no-store, no-cache, must-revalidate, proxy-revalidate',
+              'Pragma': 'no-cache',
+              'Expires': '0',
+            },
+          }
+        );
       }
     } catch (e) {
       console.warn('Supabase settings fetch skipped:', e);
     }
-    return NextResponse.json({ settings: localSettings });
+    return NextResponse.json(
+      { settings: localSettings },
+      {
+        headers: {
+          'Cache-Control': 'no-store, no-cache, must-revalidate, proxy-revalidate',
+          'Pragma': 'no-cache',
+          'Expires': '0',
+        },
+      }
+    );
   } catch (error) {
     console.error('Error fetching settings:', error);
     return NextResponse.json({ settings: {} }, { status: 500 });
@@ -42,14 +62,16 @@ export async function POST(request: NextRequest) {
     const saved = saveStoredSettings(settings);
     invalidateGlobalCache();
 
-    // 2. Best-effort Supabase sync
+    // 2. Best-effort Supabase sync (Primary multi-device source of truth)
     try {
       const supabase = createAdminClient();
-      const updates = Object.entries(settings).map(([key, value]) => ({
-        key,
-        value: String(value),
-        updated_at: new Date().toISOString(),
-      }));
+      const updates = Object.entries(settings)
+        .filter(([key, value]) => key && value !== undefined && value !== null)
+        .map(([key, value]) => ({
+          key,
+          value: String(value),
+          updated_at: new Date().toISOString(),
+        }));
       const { error: upsertErr } = await supabase.from('settings').upsert(updates);
       if (upsertErr) {
         console.warn('Supabase settings upsert warning:', upsertErr.message);
@@ -64,7 +86,16 @@ export async function POST(request: NextRequest) {
       revalidatePath('/admin', 'layout');
     } catch {}
 
-    return NextResponse.json({ success: true, settings: saved });
+    return NextResponse.json(
+      { success: true, settings: saved },
+      {
+        headers: {
+          'Cache-Control': 'no-store, no-cache, must-revalidate, proxy-revalidate',
+          'Pragma': 'no-cache',
+          'Expires': '0',
+        },
+      }
+    );
   } catch (error) {
     console.error('Error saving settings:', error);
     return NextResponse.json({ error: 'Gagal menyimpan pengaturan' }, { status: 500 });

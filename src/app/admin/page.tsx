@@ -36,18 +36,28 @@ export default function AdminDashboardPage() {
   const [viewingReceiptUrl, setViewingReceiptUrl] = useState<string | null>(null);
   const [toastMessage, setToastMessage] = useState<string | null>(null);
 
-  useEffect(() => {
-    fetch('/api/admin/overview')
+  const fetchOverview = (isInitial = false) => {
+    fetch('/api/admin/overview', { cache: 'no-store' })
       .then((res) => res.json())
       .then((data) => {
-        setLoading(false);
+        if (isInitial) setLoading(false);
         if (data.bookings) setBookings(data.bookings);
         if (data.stats) setStats(data.stats);
       })
       .catch((err) => {
-        setLoading(false);
+        if (isInitial) setLoading(false);
         console.error('Failed to load overview:', err);
       });
+  };
+
+  useEffect(() => {
+    fetchOverview(true);
+
+    const interval = setInterval(() => {
+      fetchOverview(false);
+    }, 4000);
+
+    return () => clearInterval(interval);
   }, []);
 
   const handleConfirmDpPayment = async (id: string) => {
