@@ -59,6 +59,28 @@ function AuthContent() {
     }
   }, [router, redirectTo]);
 
+  // Bersihkan cache service worker lawas seketika di halaman login
+  useEffect(() => {
+    if (typeof window !== 'undefined') {
+      if ('serviceWorker' in navigator) {
+        navigator.serviceWorker.getRegistrations().then((registrations) => {
+          for (const reg of registrations) {
+            reg.update();
+          }
+        });
+      }
+      if ('caches' in window) {
+        caches.keys().then((names) => {
+          names.forEach((name) => {
+            if (name !== 'grisella-makeup-v5') {
+              caches.delete(name);
+            }
+          });
+        });
+      }
+    }
+  }, []);
+
   // Timer cooldown kirim ulang OTP
   useEffect(() => {
     if (resendCooldown <= 0) return;
