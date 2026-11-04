@@ -15,7 +15,7 @@ declare global {
   var __grisella_cachedSettingsTime: number | undefined;
 }
 
-const CACHE_TTL_MS = 2000; // 2 detik saja agar perubahan admin langsung aktif di semua HP & Laptop
+const CACHE_TTL_MS = 15000; // 15 detik memory cache untuk kecepatan kilat sub-20ms (otomatis reset seketika saat admin simpan)
 
 function getSupabaseClient() {
   if (typeof window === 'undefined') {

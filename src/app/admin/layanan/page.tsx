@@ -20,6 +20,7 @@ import {
 import { formatRupiah } from '@/lib/utils';
 import { Service } from '@/types/database';
 import { DEFAULT_SERVICES } from '@/lib/constants';
+import { getAdminCache, setAdminCache } from '@/lib/admin-cache';
 
 export const dynamic = 'force-dynamic';
 
@@ -51,7 +52,7 @@ const PRESET_PHOTOS = [
 ];
 
 export default function AdminLayananPage() {
-  const [services, setServices] = useState<Service[]>(DEFAULT_SERVICES);
+  const [services, setServices] = useState<Service[]>(() => getAdminCache<Service[]>('services') || DEFAULT_SERVICES);
   const [editingId, setEditingId] = useState<string | null>(null);
   const [toastMessage, setToastMessage] = useState<string | null>(null);
   const [loadingSave, setLoadingSave] = useState(false);
@@ -117,11 +118,12 @@ export default function AdminLayananPage() {
   }, []);
 
   const fetchServices = () => {
-    fetch('/api/admin/services')
+    fetch('/api/admin/services', { cache: 'no-store' })
       .then((res) => res.json())
       .then((data) => {
         if (data.services && Array.isArray(data.services)) {
           setServices(data.services);
+          setAdminCache('services', data.services);
         }
       })
       .catch((err) => {

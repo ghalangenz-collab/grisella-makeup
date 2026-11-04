@@ -13,6 +13,7 @@ import {
 } from 'lucide-react';
 import { formatWIBDate, formatWIBTime, normalizeWhatsAppNumber } from '@/lib/utils';
 import { Booking } from '@/types/database';
+import { getAdminCache, setAdminCache } from '@/lib/admin-cache';
 import {
   addDays,
   addMonths,
@@ -33,14 +34,17 @@ export const dynamic = 'force-dynamic';
 export default function AdminKalenderPage() {
   const [currentDate, setCurrentDate] = useState(new Date());
   const [viewMode, setViewMode] = useState<'bulanan' | 'mingguan'>('bulanan');
-  const [bookings, setBookings] = useState<Booking[]>([]);
+  const [bookings, setBookings] = useState<Booking[]>(() => getAdminCache<Booking[]>('bookings') || []);
   const [selectedDate, setSelectedDate] = useState<Date>(new Date());
 
   useEffect(() => {
-    fetch('/api/admin/bookings')
+    fetch('/api/admin/bookings', { cache: 'no-store' })
       .then((res) => res.json())
       .then((data) => {
-        if (data.bookings) setBookings(data.bookings);
+        if (data.bookings) {
+          setBookings(data.bookings);
+          setAdminCache('bookings', data.bookings);
+        }
       })
       .catch(() => {});
   }, []);

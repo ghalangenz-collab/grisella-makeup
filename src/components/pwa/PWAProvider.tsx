@@ -125,47 +125,7 @@ export default function PWAProvider({ children }: { children: React.ReactNode })
     <>
       {children}
 
-      {/* FLOATING LUXURY INSTALL APP ICON / BANNER (Hanya tampil jika belum terinstal) */}
-      {!isStandalone && showBanner && (
-        <aside aria-label="Pasang Aplikasi" className="fixed bottom-20 md:bottom-6 left-4 right-4 max-w-md mx-auto z-40 animate-in slide-in-from-bottom-5 duration-300">
-          <div className="bg-[#2D2424] text-white rounded-3xl p-3.5 shadow-2xl border-2 border-[#C97A7E] flex items-center justify-between gap-3">
-            <div className="flex items-center gap-3">
-              <div className="w-10 h-10 rounded-2xl bg-[#FAEDF0] border border-[#F1DADF] flex items-center justify-center text-[#C97A7E] shrink-0 shadow-xs">
-                <Sparkles className="w-5 h-5 text-[#C97A7E]" />
-              </div>
-              <div className="min-w-0">
-                <h4 className="font-serif font-bold text-xs text-white leading-tight flex items-center gap-1.5">
-                  <span>Pasang Aplikasi Grisella</span>
-                </h4>
-                <p className="text-[10px] text-[#D1C7C7] truncate mt-0.5">
-                  Akses instan di Android & iPhone tanpa unduh di Play Store
-                </p>
-              </div>
-            </div>
-
-            <div className="flex items-center gap-1.5 shrink-0">
-              <button
-                type="button"
-                onClick={handleInstallClick}
-                className="py-2 px-3 rounded-xl bg-[#C97A7E] hover:bg-[#B5676B] text-white text-xs font-bold flex items-center gap-1.5 shadow-sm transition-all cursor-pointer active:scale-95"
-              >
-                <Download className="w-3.5 h-3.5" />
-                <span>Pasang</span>
-              </button>
-              <button
-                type="button"
-                onClick={() => setShowBanner(false)}
-                className="p-1.5 rounded-xl hover:bg-white/10 text-zinc-400 hover:text-white cursor-pointer"
-                title="Tutup banner"
-              >
-                <X className="w-4 h-4" />
-              </button>
-            </div>
-          </div>
-        </aside>
-      )}
-
-      {/* MODAL PANDUAN INSTALASI iOS / SAFARI */}
+      {/* MODAL PANDUAN INSTALASI iOS & ANDROID (Hanya muncul jika tombol App di Navbar diklik) */}
       {showIOSModal && (
         <div className="fixed inset-0 z-50 bg-black/70 backdrop-blur-xs flex items-center justify-center p-4">
           <div className="bg-[#FDFBF7] rounded-3xl p-6 max-w-sm w-full space-y-4 shadow-2xl border border-[#EBDCD5] animate-in zoom-in-95 duration-200">
@@ -176,68 +136,106 @@ export default function PWAProvider({ children }: { children: React.ReactNode })
                 </div>
                 <div>
                   <h3 className="font-serif font-bold text-sm text-[#2D2424]">
-                    Cara Pasang di iPhone / iPad
+                    Pasang Aplikasi Grisella
                   </h3>
-                  <span className="text-[10px] text-[#8A797A]">Hanya 3 langkah cepat di Safari</span>
+                  <span className="text-[10px] text-[#8A797A]">
+                    {isIOS ? 'Panduan Resmi iPhone / Safari' : 'Instalasi Cepat Android / Web'}
+                  </span>
                 </div>
               </div>
               <button
                 onClick={() => setShowIOSModal(false)}
                 className="p-1 rounded-xl text-[#635354] hover:bg-[#FAEDF0] cursor-pointer"
+                aria-label="Tutup modal"
               >
                 <X className="w-5 h-5" />
               </button>
             </div>
 
-            <div className="space-y-3 text-xs text-[#2D2424]">
-              {/* Langkah 1 */}
-              <div className="p-3 bg-white border border-[#EBDCD5] rounded-2xl flex items-start gap-3">
-                <div className="w-6 h-6 rounded-full bg-[#FAEDF0] text-[#8C4247] font-bold text-xs flex items-center justify-center shrink-0">
-                  1
+            {isIOS ? (
+              /* Panduan Resmi iOS / Safari */
+              <div className="space-y-3 text-xs text-[#2D2424]">
+                <div className="p-2.5 bg-amber-50 border border-amber-200 rounded-xl text-[11px] text-amber-900 leading-relaxed">
+                  💡 <strong>Info Pengguna iPhone:</strong> Apple tidak menyediakan file unduhan langsung (.ipa) di luar App Store. Cara resmi memasang aplikasi web di iOS adalah dengan <strong>Tambah ke Layar Utama</strong>. Ikon akan langsung muncul di beranda iPhone kamu dan bisa dibuka layaknya aplikasi asli!
                 </div>
-                <div>
-                  <span className="font-semibold block">Tekan tombol Bagikan (Share)</span>
-                  <p className="text-[11px] text-[#635354] mt-0.5">
-                    Ketuk ikon kotak berpanah atas <Share className="w-3.5 h-3.5 inline mx-1 text-blue-600" /> di bilah bawah browser Safari kamu.
-                  </p>
-                </div>
-              </div>
 
-              {/* Langkah 2 */}
-              <div className="p-3 bg-white border border-[#EBDCD5] rounded-2xl flex items-start gap-3">
-                <div className="w-6 h-6 rounded-full bg-[#FAEDF0] text-[#8C4247] font-bold text-xs flex items-center justify-center shrink-0">
-                  2
+                <div className="p-3 bg-white border border-[#EBDCD5] rounded-2xl flex items-start gap-3">
+                  <div className="w-6 h-6 rounded-full bg-[#FAEDF0] text-[#8C4247] font-bold text-xs flex items-center justify-center shrink-0">
+                    1
+                  </div>
+                  <div>
+                    <span className="font-semibold block">Tekan tombol Bagikan (Share)</span>
+                    <p className="text-[11px] text-[#635354] mt-0.5">
+                      Ketuk ikon kotak berpanah atas <Share className="w-3.5 h-3.5 inline mx-1 text-blue-600" /> di bilah navigasi bawah browser Safari iPhone.
+                    </p>
+                  </div>
                 </div>
-                <div>
-                  <span className="font-semibold block">Pilih Tambah ke Layar Utama</span>
-                  <p className="text-[11px] text-[#635354] mt-0.5">
-                    Gulir ke bawah menu Safari, lalu pilih menu{' '}
-                    <strong>&ldquo;Tambah ke Layar Utama&rdquo; (Add to Home Screen)</strong>{' '}
-                    <Plus className="w-3.5 h-3.5 inline mx-1 text-zinc-700" />.
-                  </p>
-                </div>
-              </div>
 
-              {/* Langkah 3 */}
-              <div className="p-3 bg-white border border-[#EBDCD5] rounded-2xl flex items-start gap-3">
-                <div className="w-6 h-6 rounded-full bg-[#FAEDF0] text-[#8C4247] font-bold text-xs flex items-center justify-center shrink-0">
-                  3
+                <div className="p-3 bg-white border border-[#EBDCD5] rounded-2xl flex items-start gap-3">
+                  <div className="w-6 h-6 rounded-full bg-[#FAEDF0] text-[#8C4247] font-bold text-xs flex items-center justify-center shrink-0">
+                    2
+                  </div>
+                  <div>
+                    <span className="font-semibold block">Pilih Tambah ke Layar Utama</span>
+                    <p className="text-[11px] text-[#635354] mt-0.5">
+                      Gulir sedikit ke bawah, lalu pilih menu{' '}
+                      <strong>&ldquo;Tambah ke Layar Utama&rdquo; (Add to Home Screen)</strong>{' '}
+                      <Plus className="w-3.5 h-3.5 inline mx-1 text-zinc-700" />.
+                    </p>
+                  </div>
                 </div>
-                <div>
-                  <span className="font-semibold block">Tekan &ldquo;Tambah&rdquo; (Add)</span>
-                  <p className="text-[11px] text-[#635354] mt-0.5">
-                    Tekan tombol Tambah di pojok kanan atas layar. Ikon Grisella Makeup akan muncul di homescreen iPhone kamu!
-                  </p>
+
+                <div className="p-3 bg-white border border-[#EBDCD5] rounded-2xl flex items-start gap-3">
+                  <div className="w-6 h-6 rounded-full bg-[#FAEDF0] text-[#8C4247] font-bold text-xs flex items-center justify-center shrink-0">
+                    3
+                  </div>
+                  <div>
+                    <span className="font-semibold block">Tekan &ldquo;Tambah&rdquo; (Add)</span>
+                    <p className="text-[11px] text-[#635354] mt-0.5">
+                      Tekan tombol <strong>Tambah</strong> di pojok kanan atas. Ikon Grisella MUA akan terpasang di layar utama iPhone kamu tanpa perlu unduh di App Store!
+                    </p>
+                  </div>
                 </div>
               </div>
-            </div>
+            ) : (
+              /* Panduan Android / Chrome */
+              <div className="space-y-3 text-xs text-[#2D2424]">
+                <div className="p-2.5 bg-emerald-50 border border-emerald-200 rounded-xl text-[11px] text-emerald-900 leading-relaxed">
+                  ✨ Aplikasi dapat langsung dipasang ke ponsel Android kamu tanpa perlu buka Play Store.
+                </div>
+                {deferredPrompt ? (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      deferredPrompt.prompt();
+                      deferredPrompt.userChoice.then(() => {
+                        setDeferredPrompt(null);
+                        setShowIOSModal(false);
+                      });
+                    }}
+                    className="w-full py-3 rounded-2xl bg-[#C97A7E] hover:bg-[#B5676B] text-white text-xs font-bold shadow-md cursor-pointer transition-transform active:scale-98 flex items-center justify-center gap-2"
+                  >
+                    <Download className="w-4 h-4" />
+                    <span>Pasang Aplikasi Sekarang</span>
+                  </button>
+                ) : (
+                  <div className="p-3 bg-white border border-[#EBDCD5] rounded-2xl space-y-2 text-[11px] text-[#635354]">
+                    <p>
+                      Buka menu titik tiga <span className="font-bold">⋮</span> di pojok kanan atas Chrome, lalu pilih{' '}
+                      <strong className="text-[#2D2424]">&ldquo;Pasang aplikasi&rdquo;</strong> atau{' '}
+                      <strong className="text-[#2D2424]">&ldquo;Tambahkan ke Layar Utama&rdquo;</strong>.
+                    </p>
+                  </div>
+                )}
+              </div>
+            )}
 
             <button
               type="button"
               onClick={() => setShowIOSModal(false)}
               className="w-full py-2.5 rounded-2xl bg-[#C97A7E] text-white text-xs font-semibold shadow-xs cursor-pointer active:scale-98"
             >
-              Saya Mengerti
+              Tutup
             </button>
           </div>
         </div>

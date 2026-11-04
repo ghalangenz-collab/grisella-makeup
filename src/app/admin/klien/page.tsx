@@ -17,11 +17,12 @@ import {
 } from 'lucide-react';
 import { formatRupiah, formatWIBDate, formatWIBTime, normalizeWhatsAppNumber } from '@/lib/utils';
 import { Client, Booking } from '@/types/database';
+import { getAdminCache, setAdminCache } from '@/lib/admin-cache';
 
 export const dynamic = 'force-dynamic';
 
 export default function AdminKlienPage() {
-  const [clients, setClients] = useState<Client[]>([]);
+  const [clients, setClients] = useState<Client[]>(() => getAdminCache<Client[]>('clients') || []);
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedClient, setSelectedClient] = useState<Client | null>(null);
   const [clientBookings, setClientBookings] = useState<Booking[]>([]);
@@ -49,10 +50,13 @@ export default function AdminKlienPage() {
   }, []);
 
   const fetchClients = () => {
-    fetch('/api/admin/clients')
+    fetch('/api/admin/clients', { cache: 'no-store' })
       .then((res) => res.json())
       .then((data) => {
-        if (data.clients) setClients(data.clients);
+        if (data.clients) {
+          setClients(data.clients);
+          setAdminCache('clients', data.clients);
+        }
       })
       .catch(() => {});
   };

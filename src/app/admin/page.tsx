@@ -20,19 +20,21 @@ import {
 } from 'lucide-react';
 import { formatRupiah, formatWIBDate, formatWIBTime, normalizeWhatsAppNumber } from '@/lib/utils';
 import { Booking } from '@/types/database';
+import { getAdminCache, setAdminCache } from '@/lib/admin-cache';
 
 export const dynamic = 'force-dynamic';
 
 export default function AdminDashboardPage() {
-  const [bookings, setBookings] = useState<Booking[]>([]);
-  const [stats, setStats] = useState({
+  const cachedOverview = getAdminCache<any>('overview');
+  const [bookings, setBookings] = useState<Booking[]>(() => cachedOverview?.bookings || []);
+  const [stats, setStats] = useState(() => cachedOverview?.stats || {
     todayBookingsCount: 0,
     actionRequiredCount: 0,
     verificationRequiredCount: 0,
     monthRevenue: 0,
     totalClients: 0,
   });
-  const [loading, setLoading] = useState(true);
+  const [loading, setLoading] = useState(() => !cachedOverview);
   const [viewingReceiptUrl, setViewingReceiptUrl] = useState<string | null>(null);
   const [toastMessage, setToastMessage] = useState<string | null>(null);
 
@@ -43,6 +45,7 @@ export default function AdminDashboardPage() {
         if (isInitial) setLoading(false);
         if (data.bookings) setBookings(data.bookings);
         if (data.stats) setStats(data.stats);
+        if (data.bookings || data.stats) setAdminCache('overview', data);
       })
       .catch((err) => {
         if (isInitial) setLoading(false);
@@ -54,8 +57,10 @@ export default function AdminDashboardPage() {
     fetchOverview(true);
 
     const interval = setInterval(() => {
-      fetchOverview(false);
-    }, 4000);
+      if (typeof document !== 'undefined' && document.visibilityState === 'visible') {
+        fetchOverview(false);
+      }
+    }, 1500);
 
     return () => clearInterval(interval);
   }, []);

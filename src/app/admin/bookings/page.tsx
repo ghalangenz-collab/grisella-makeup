@@ -26,11 +26,12 @@ import {
 } from '@/lib/utils';
 import { Booking, BookingStatus } from '@/types/database';
 import { createClient } from '@/lib/supabase/client';
+import { getAdminCache, setAdminCache } from '@/lib/admin-cache';
 
 export const dynamic = 'force-dynamic';
 
 export default function AdminBookingsPage() {
-  const [bookings, setBookings] = useState<Booking[]>([]);
+  const [bookings, setBookings] = useState<Booking[]>(() => getAdminCache<Booking[]>('bookings') || []);
   const [filterStatus, setFilterStatus] = useState<string>('semua');
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedBooking, setSelectedBooking] = useState<Booking | null>(null);
@@ -113,6 +114,7 @@ export default function AdminBookingsPage() {
 
           prevBookingsRef.current = freshList;
           setBookings(freshList);
+          setAdminCache('bookings', freshList);
         }
       })
       .catch((err) => console.error('Failed to load bookings:', err));
@@ -174,10 +176,12 @@ export default function AdminBookingsPage() {
       console.warn('Realtime channel setup skipped:', realtimeErr);
     }
 
-    // 2. BACKGROUND POLLING FALLBACK (Setiap 4 detik untuk sinkronisasi instan antar-perangkat)
+    // 2. BACKGROUND POLLING FALLBACK (Setiap 1.5 detik untuk notifikasi instan super cepat)
     const pollInterval = setInterval(() => {
-      fetchBookings();
-    }, 4000);
+      if (typeof document !== 'undefined' && document.visibilityState === 'visible') {
+        fetchBookings();
+      }
+    }, 1500);
 
     return () => {
       clearInterval(pollInterval);

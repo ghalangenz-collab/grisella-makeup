@@ -21,6 +21,7 @@ import {
 import { DEFAULT_SETTINGS } from '@/lib/constants';
 import { BankAccount } from '@/types/database';
 import { formatRupiah, normalizeWhatsAppNumber } from '@/lib/utils';
+import { getAdminCache, setAdminCache } from '@/lib/admin-cache';
 
 export const dynamic = 'force-dynamic';
 
@@ -36,7 +37,7 @@ const DEFAULT_TRANSPORT_ZONES: TransportZone[] = [
 ];
 
 export default function AdminPengaturanPage() {
-  const [settings, setSettings] = useState<Record<string, string>>(DEFAULT_SETTINGS);
+  const [settings, setSettings] = useState<Record<string, string>>(() => getAdminCache<Record<string, string>>('settings') || DEFAULT_SETTINGS);
   const [bankAccounts, setBankAccounts] = useState<BankAccount[]>([
     { id: '1', bank_name: 'BCA', account_number: '8735091234', account_name: 'GRISELLA PUTRI' },
     { id: '2', bank_name: 'Bank Mandiri', account_number: '1370019283741', account_name: 'GRISELLA PUTRI' },
@@ -55,6 +56,7 @@ export default function AdminPengaturanPage() {
       .then((data) => {
         if (data.settings) {
           setSettings(data.settings);
+          setAdminCache('settings', data.settings);
           if (data.settings.bank_accounts) {
             try {
               const parsed = JSON.parse(data.settings.bank_accounts);
