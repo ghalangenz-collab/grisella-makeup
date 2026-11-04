@@ -96,7 +96,7 @@ export async function POST(request: NextRequest) {
         phone: String(phone),
         phone_normalized: cleanPhone,
         source: 'Registrasi Akun Pelanggan',
-        notes_favorite_style: `User Akun Pelanggan: ${cleanEmail}`,
+        notes: `User Akun Pelanggan: ${cleanEmail}`,
       });
     } catch (syncErr) {
       console.warn('Sync client on register skipped:', syncErr);

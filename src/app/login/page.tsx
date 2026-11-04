@@ -72,7 +72,7 @@ function AuthContent() {
       if ('caches' in window) {
         caches.keys().then((names) => {
           names.forEach((name) => {
-            if (name !== 'grisella-makeup-v6') {
+            if (name !== 'grisella-makeup-v8') {
               caches.delete(name);
             }
           });

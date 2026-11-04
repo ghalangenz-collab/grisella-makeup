@@ -46,7 +46,7 @@ export async function POST(request: NextRequest) {
             .from('clients')
             .update({
               name,
-              notes_favorite_style: `User Akun Pelanggan: ${cleanEmail}`,
+              notes: `User Akun Pelanggan: ${cleanEmail}`,
               updated_at: new Date().toISOString(),
             })
             .eq('id', sbClientId);
@@ -61,7 +61,7 @@ export async function POST(request: NextRequest) {
             phone: phone || cleanPhone || '-',
             phone_normalized: cleanPhone || '-',
             source: 'Registrasi Akun Pelanggan',
-            notes_favorite_style: `User Akun Pelanggan: ${cleanEmail}`,
+            notes: `User Akun Pelanggan: ${cleanEmail}`,
           })
           .select('id')
           .single();
