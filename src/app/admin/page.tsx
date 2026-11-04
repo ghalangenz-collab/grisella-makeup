@@ -24,10 +24,18 @@ import { getAdminCache, setAdminCache } from '@/lib/admin-cache';
 
 export const dynamic = 'force-dynamic';
 
+interface DashboardStats {
+  todayBookingsCount: number;
+  actionRequiredCount: number;
+  verificationRequiredCount: number;
+  monthRevenue: number;
+  totalClients: number;
+}
+
 export default function AdminDashboardPage() {
-  const cachedOverview = getAdminCache<any>('overview');
+  const cachedOverview = getAdminCache<{ bookings?: Booking[]; stats?: DashboardStats }>('overview');
   const [bookings, setBookings] = useState<Booking[]>(() => cachedOverview?.bookings || []);
-  const [stats, setStats] = useState(() => cachedOverview?.stats || {
+  const [stats, setStats] = useState<DashboardStats>(() => cachedOverview?.stats || {
     todayBookingsCount: 0,
     actionRequiredCount: 0,
     verificationRequiredCount: 0,
