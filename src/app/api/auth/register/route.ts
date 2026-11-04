@@ -34,6 +34,19 @@ export async function POST(request: NextRequest) {
       );
     }
 
+    // 0. Cek apakah email sudah terdaftar sebelumnya di Cloud Database / Stored Accounts
+    try {
+      const existingCloud = await findCloudUserAccount(cleanEmail);
+      if (existingCloud) {
+        return NextResponse.json(
+          { error: 'Email ini sudah terdaftar. Silakan pilih tab "Masuk (Login)" untuk masuk.' },
+          { status: 409 }
+        );
+      }
+    } catch (checkErr) {
+      console.warn('Check existing cloud user warning:', checkErr);
+    }
+
     const supabaseUrl = getSupabaseUrl();
     const supabaseKey = getSupabaseAnonKey();
 
@@ -41,23 +54,31 @@ export async function POST(request: NextRequest) {
     const localUserId = `usr-${Date.now()}`;
     const passwordHash = hashPassword(String(password));
 
-    await saveCloudUserAccount({
-      id: localUserId,
-      email: cleanEmail,
-      fullName: name,
-      phone: String(phone),
-      passwordHash,
-      createdAt: new Date().toISOString(),
-    });
+    try {
+      await saveCloudUserAccount({
+        id: localUserId,
+        email: cleanEmail,
+        fullName: name,
+        phone: String(phone),
+        passwordHash,
+        createdAt: new Date().toISOString(),
+      });
+    } catch (saveErr) {
+      console.warn('Save cloud user warning:', saveErr);
+    }
 
-    saveStoredUserAccount({
-      id: localUserId,
-      email: cleanEmail,
-      fullName: name,
-      phone: String(phone),
-      passwordHash,
-      createdAt: new Date().toISOString(),
-    });
+    try {
+      saveStoredUserAccount({
+        id: localUserId,
+        email: cleanEmail,
+        fullName: name,
+        phone: String(phone),
+        passwordHash,
+        createdAt: new Date().toISOString(),
+      });
+    } catch (storeErr) {
+      console.warn('Save stored user warning:', storeErr);
+    }
 
     // 2. Simpan juga ke stored client & database clients Supabase
     try {
@@ -81,9 +102,9 @@ export async function POST(request: NextRequest) {
       console.warn('Sync client on register skipped:', syncErr);
     }
 
-    // 3. Daftarkan juga ke Supabase Auth REST API
+    // 3. Daftarkan juga ke Supabase Auth REST API (dengan timeout 4 detik)
     let sbUserId: string | null = null;
-    let isAutoConfirmed = false;
+    let isAutoConfirmed = true;
 
     try {
       const sbRes = await fetch(`${supabaseUrl}/auth/v1/signup`, {
@@ -92,6 +113,7 @@ export async function POST(request: NextRequest) {
           'apikey': supabaseKey,
           'Content-Type': 'application/json',
         },
+        signal: AbortSignal.timeout(4000),
         body: JSON.stringify({
           email: cleanEmail,
           password: String(password),
@@ -107,22 +129,18 @@ export async function POST(request: NextRequest) {
 
       if (sbRes.ok) {
         sbUserId = data.id || data.user?.id || null;
-        isAutoConfirmed = Boolean(data.session && data.user);
       } else {
         const msg = data.msg || data.error_description || data.message || '';
         if (msg.toLowerCase().includes('already registered')) {
           return NextResponse.json(
-            { error: 'Email ini sudah terdaftar. Silakan pilih tab "Masuk (Login)".' },
+            { error: 'Email ini sudah terdaftar. Silakan pilih tab "Masuk (Login)" untuk masuk.' },
             { status: 409 }
           );
         }
         console.warn('Supabase auth signup notice:', msg);
-        // Jika rate limit email terlampaui di Supabase, akun lokal tetap aktif langsung
-        isAutoConfirmed = true;
       }
     } catch (sbErr) {
-      console.warn('Supabase signup request skipped:', sbErr);
-      isAutoConfirmed = true;
+      console.warn('Supabase signup request skipped / timed out:', sbErr);
     }
 
     return NextResponse.json({

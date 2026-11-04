@@ -148,66 +148,6 @@ export default function AdminLaporanPage() {
 
   return (
     <div className="space-y-6">
-      {/* CSS KHUSUS PRINT PDF */}
-      <style jsx global>{`
-        @media print {
-          /* Sembunyikan elemen navigasi dan tombol non-cetak */
-          aside,
-          header,
-          nav,
-          .no-print {
-            display: none !important;
-          }
-
-          body {
-            background: white !important;
-            color: #111 !important;
-            font-size: 11pt !important;
-            padding: 0 !important;
-            margin: 0 !important;
-          }
-
-          /* Tampilkan container laporan secara penuh */
-          .print-container {
-            display: block !important;
-            width: 100% !important;
-            margin: 0 !important;
-            padding: 20px !important;
-          }
-
-          .print-header {
-            display: block !important;
-            border-bottom: 2px solid #333;
-            padding-bottom: 12px;
-            margin-bottom: 20px;
-          }
-
-          .print-card {
-            border: 1px solid #ddd !important;
-            box-shadow: none !important;
-            background: white !important;
-            page-break-inside: avoid;
-          }
-
-          table {
-            width: 100% !important;
-            border-collapse: collapse !important;
-          }
-
-          th, td {
-            border: 1px solid #ddd !important;
-            padding: 8px !important;
-            font-size: 9pt !important;
-          }
-
-          th {
-            background-color: #f5f5f5 !important;
-            color: #000 !important;
-            font-weight: bold !important;
-          }
-        }
-      `}</style>
-
       {/* HEADER UTAMA & TOMBOL UNDUH PDF */}
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 no-print">
         <div>
